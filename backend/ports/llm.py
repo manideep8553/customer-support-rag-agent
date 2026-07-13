@@ -1,0 +1,9 @@
+from typing import Protocol, AsyncIterator
+
+
+class LLM(Protocol):
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str: ...
+
+    def stream(self, prompt: str, system_prompt: str | None = None) -> AsyncIterator[str]: ...
+
+    def count_tokens(self, text: str) -> int: ...
