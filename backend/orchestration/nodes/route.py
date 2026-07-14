@@ -6,13 +6,15 @@ from backend.orchestration.state import ConversationState
 logger = logging.getLogger("gigacorp.route")
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
+    "order_status": ["track order", "where is my order", "order status", "my order", "tracking"],
+    "loyalty": ["loyalty", "points", "rewards", "loyalty tier", "my tier", "my points"],
     "refund": ["return", "refund", "money back"],
-    "shipping": ["shipping", "delivery", "ship", "track order", "where is my order"],
+    "shipping": ["shipping", "delivery", "ship"],
     "warranty": ["warrant"],
     "password": ["password", "reset"],
     "upgrade": ["upgrade", "downgrade"],
     "cancellation": ["cancel", "close account", "delete account"],
-    "billing": ["bill", "payment", "invoice"],
+    "billing": ["bill", "payment", "invoice", "subscription"],
     "trial": ["trial", "free"],
     "privacy": ["privacy", "gdpr", "data"],
     "contact": ["contact", "support", "phone"],
@@ -28,12 +30,14 @@ FOLLOW_UP_KEYWORDS: dict[str, list[str]] = {
     "refund": ["return", "refund", "money"],
     "shipping": ["ship", "delivery", "track", "order", "cost", "price", "fee", "rate"],
     "pricing": ["cost", "price", "pricing", "fee", "much", "how much"],
-    "billing": ["bill", "payment", "invoice", "charge"],
+    "billing": ["bill", "payment", "invoice", "charge", "subscription"],
     "warranty": ["warrant", "repair", "replace"],
     "cancellation": ["cancel", "close"],
     "upgrade": ["upgrade", "downgrade"],
     "trial": ["trial", "free"],
     "contact": ["contact", "support", "phone", "email"],
+    "order_status": ["track", "order", "status", "delivery"],
+    "loyalty": ["points", "loyalty", "tier", "rewards"],
 }
 
 

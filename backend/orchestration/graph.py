@@ -32,6 +32,8 @@ INTENT_NODES = {
     "licensing": answer_nodes.answer_licensing,
     "sla": answer_nodes.answer_sla,
     "nonprofit": answer_nodes.answer_nonprofit,
+    "order_status": answer_nodes.answer_order_status,
+    "loyalty": answer_nodes.answer_loyalty,
     "general": answer_nodes.answer_general,
 }
 
@@ -165,6 +167,7 @@ class SupportGraph:
             for m in history_messages[-6:]
         )
 
+        customer_data = (user_info or {}).get("customer_data", {}) or {}
         initial_state: ConversationState = {
             "messages": [],
             "session_id": session_id,
@@ -178,6 +181,7 @@ class SupportGraph:
             "history_str": history_str,
             "user_name": user_info.get("display_name", "") if user_info else "",
             "user_company": user_info.get("company", "") if user_info else "",
+            "customer_data": customer_data,
         }
         config = {"configurable": {"thread_id": session_id}}
 

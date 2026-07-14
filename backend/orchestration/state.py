@@ -16,3 +16,4 @@ class ConversationState(TypedDict):
     history_str: str
     user_name: str
     user_company: str
+    customer_data: dict

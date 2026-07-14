@@ -36,6 +36,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db():
     import backend.auth.models  # noqa: F401 - register models on Base.metadata
+    import backend.customer.models  # noqa: F401 - register customer models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created / verified")

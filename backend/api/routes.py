@@ -8,6 +8,7 @@ from traceback import format_exception
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from backend.models.schemas import (
@@ -54,6 +55,8 @@ from backend.security import (
 )
 from backend.auth.dependencies import get_optional_user
 from backend.auth.models import User
+from backend.auth.database import get_db
+from backend.customer.service import CustomerService
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def _session_info_to_schema(info: SessionInfo) -> SessionInfoSchema:
     return SessionInfoSchema(**d)
 
 
-def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRouter:
+def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager, customer_service: CustomerService | None = None) -> APIRouter:
     router = APIRouter(dependencies=[Depends(verify_api_key)])
 
     # ── Chat ───────────────────────────────────────────────────────────
@@ -109,13 +112,20 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             500: {"description": "Internal server error"},
         },
     )
-    async def chat(request: ChatRequest, current_user: User = Depends(get_optional_user)):
+    async def chat(request: ChatRequest, current_user: User = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
         sanitized_message = sanitize_text(request.message, max_length=2000)
         start = time.monotonic()
         user_info = {"display_name": current_user.display_name, "company": current_user.company} if current_user else None
+        if current_user and customer_service:
+            try:
+                customer_data = await customer_service.get_chat_context(current_user.id, db)
+                if customer_data:
+                    user_info["customer_data"] = customer_data
+            except Exception as e:
+                logger.warning("Failed to load customer data for user %s: %s", current_user.id, e)
         try:
             result = orch.query(request.session_id, sanitized_message, user_info=user_info)
         except GigaCorpError as e:
@@ -150,12 +160,19 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             422: {"description": "Validation error"},
         },
     )
-    async def chat_stream(request: ChatRequest, current_user: User = Depends(get_optional_user)):
+    async def chat_stream(request: ChatRequest, current_user: User = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
         sanitized_message = sanitize_text(request.message, max_length=2000)
         user_info = {"display_name": current_user.display_name, "company": current_user.company} if current_user else None
+        if current_user and customer_service:
+            try:
+                customer_data = await customer_service.get_chat_context(current_user.id, db)
+                if customer_data:
+                    user_info["customer_data"] = customer_data
+            except Exception as e:
+                logger.warning("Failed to load customer data for user %s: %s", current_user.id, e)
 
         async def event_generator():
             try:

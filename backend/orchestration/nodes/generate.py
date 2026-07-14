@@ -11,6 +11,7 @@ from backend.orchestration.nodes.answers import (
     answer_cancellation, answer_billing, answer_trial,
     answer_privacy, answer_pricing, answer_licensing,
     answer_sla, answer_nonprofit, answer_general,
+    answer_order_status, answer_loyalty,
 )
 
 logger = logging.getLogger("gigacorp.generate")
@@ -184,7 +185,7 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
     return "\n".join(parts)
 
 
-def _build_rag_prompt(query: str, context: str, history: str, user_name: str = "", user_company: str = "") -> tuple[str, str]:
+def _build_rag_prompt(query: str, context: str, history: str, user_name: str = "", user_company: str = "", customer_data: dict | None = None) -> tuple[str, str]:
     user_prompt = f"""{"=" * 60}
 RETRIEVED KNOWLEDGE:
 {context}
@@ -205,6 +206,29 @@ CURRENT QUESTION: {query}
         system += f"\n\nThe user's name is {user_name}. Use their name occasionally to personalize responses."
     if user_company:
         system += f"\n\nThe user is from {user_company}. Reference their company when relevant."
+    if customer_data:
+        orders = customer_data.get("recent_orders", [])
+        subs = customer_data.get("subscriptions", [])
+        loyalty = customer_data.get("loyalty", {})
+        addr = customer_data.get("default_address", {})
+        system += "\n\n--- CUSTOMER DATA (for personalized responses) ---\n"
+        system += f"Customer ID: {customer_data.get('customer_id', 'N/A')}\n"
+        system += f"Account Status: {customer_data.get('account_status', 'N/A')}\n"
+        system += f"Phone: {customer_data.get('phone', 'N/A')}\n"
+        if loyalty:
+            system += f"Loyalty Tier: {loyalty.get('tier', 'N/A').title()} ({loyalty.get('points', 0)} points)\n"
+        if addr:
+            system += f"Default Shipping Address: {addr.get('street_line1', '')}, {addr.get('city', '')}, {addr.get('state', '')} {addr.get('postal_code', '')}, {addr.get('country', '')}\n"
+        if subs:
+            system += "Active Subscriptions:\n"
+            for s in subs:
+                system += f"  - {s['plan_name']} (${s['amount']:.2f}/{s['billing_cycle']})\n"
+        if orders:
+            system += "Recent Orders:\n"
+            for o in orders[:2]:
+                items_str = ", ".join(i['product_name'] for i in o.get('items', []))
+                system += f"  - {o['order_number']}: {o['status'].title()} - {items_str}\n"
+        system += "\nUse this customer data to provide personalized responses when relevant. Do not fabricate data not present here."
     return system, user_prompt
 
 
@@ -240,15 +264,19 @@ INTENT_ANSWER_FN: dict[str, callable] = {
     "licensing": answer_licensing,
     "sla": answer_sla,
     "nonprofit": answer_nonprofit,
+    "order_status": answer_order_status,
+    "loyalty": answer_loyalty,
     "general": answer_general,
 }
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
+    "order_status": ["track order", "where is my order", "order status", "my order", "tracking"],
+    "loyalty": ["loyalty", "points", "rewards", "loyalty tier", "my tier", "my points"],
     "refund": ["return", "refund", "money back"],
-    "shipping": ["shipping", "delivery", "ship", "track order", "where is my order", "order status"],
+    "shipping": ["shipping", "delivery", "ship"],
     "contact": ["contact", "support", "phone", "email support", "customer service", "talk to"],
     "pricing": ["price", "cost", "pricing", "how much"],
-    "billing": ["bill", "payment", "invoice"],
+    "billing": ["bill", "payment", "invoice", "subscription"],
     "warranty": ["warrant"],
     "password": ["password", "reset"],
     "upgrade": ["upgrade", "downgrade"],
@@ -278,6 +306,7 @@ def build_generate_node(llm=None, memory=None):
         session_id = state.get("session_id", "")
         user_name = state.get("user_name", "")
         user_company = state.get("user_company", "")
+        customer_data = state.get("customer_data", {}) or {}
 
         # Pass through pre-set answer (e.g., from greeting handler, error fallback)
         existing_answer = state.get("answer", "")
@@ -293,9 +322,13 @@ def build_generate_node(llm=None, memory=None):
                 result = INTENT_ANSWER_FN[intent](state)
                 answer = result.get("answer", "")
                 # Personalize rule-based answer with user name
-                if user_name and answer.startswith("Here are") or answer.startswith("According to"):
-                    answer = answer.replace("Here are", f"Here are, {user_name},")
-                    answer = answer.replace("According to GigaCorp", f"According to GigaCorp's policies, {user_name},")
+                if user_name:
+                    if answer.startswith("Here are"):
+                        answer = answer.replace("Here are", f"Here are, {user_name},")
+                    elif answer.startswith("According"):
+                        answer = answer.replace("According to GigaCorp", f"According to GigaCorp's policies, {user_name},")
+                    elif answer.startswith("Your") or answer.startswith("Per"):
+                        pass
                 return {"answer": answer, "sources": sources}
 
         if llm and has_relevant:
@@ -311,7 +344,7 @@ def build_generate_node(llm=None, memory=None):
             try:
                 safe_query = reinforce_grounding(query)
                 history = _build_history(memory, session_id, llm, safe_query)
-                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history, user_name, user_company)
+                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history, user_name, user_company, customer_data)
                 answer = llm.generate(user_prompt, system_prompt=system_prompt)
                 response_cache.set(session_id, query, context_preview, answer)
             except Exception as e:

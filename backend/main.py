@@ -16,6 +16,9 @@ from backend.config import settings
 from backend.di.container import container
 from backend.api.routes import build_router
 from backend.auth.router import router as auth_router
+from backend.customer.router import build_customer_router
+from backend.customer.service import CustomerService
+from backend.auth.database import async_session_factory
 from backend.core.events import event_bus
 from backend.core.registry import registry
 from backend.errors import (
@@ -53,6 +56,19 @@ async def lifespan(app: FastAPI):
         from backend.auth.database import init_db
         await init_db()
         logger.info("Database initialized")
+
+        try:
+            from backend.customer.seed import seed_customer_data
+            async with async_session_factory() as seed_session:
+                try:
+                    await seed_customer_data(seed_session)
+                except Exception as e:
+                    logger.warning("Customer seed failed: %s", e)
+                finally:
+                    await seed_session.close()
+        except Exception as e:
+            log_exception(e, "lifespan.customer_seed")
+            logger.warning("Customer seeding skipped: %s", e)
     except Exception as e:
         log_exception(e, "lifespan.database")
         logger.warning("Database init failed (will retry on first request): %s", e)
@@ -143,9 +159,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-router = build_router(container.orchestrator, container.kb_manager)
+customer_service = CustomerService(lambda: async_session_factory())
+router = build_router(container.orchestrator, container.kb_manager, customer_service=customer_service)
+customer_router = build_customer_router(customer_service)
 app.include_router(auth_router)
 app.include_router(router, prefix="/api/v1")
+app.include_router(customer_router)
 
 frontend_paths = [
     Path(__file__).resolve().parent.parent / "react-frontend" / "dist",
