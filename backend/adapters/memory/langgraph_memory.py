@@ -74,7 +74,18 @@ class LangGraphMemory(Memory):
         with self._lock:
             session = self._ensure_active(session_id)
             if not session:
-                return
+                if session_id not in self._sessions:
+                    if len(self._sessions) >= self._max_sessions:
+                        self._evict_oldest()
+                    self._sessions[session_id] = {
+                        "session_id": session_id,
+                        "created_at": datetime.utcnow().isoformat(),
+                        "last_active": datetime.utcnow().isoformat(),
+                        "messages": [],
+                        "state": {},
+                        "summary": "",
+                    }
+                session = self._sessions[session_id]
             entry = MessageEntry(role=role, content=content)
             session["messages"].append(entry.to_dict())
             session["last_active"] = datetime.utcnow().isoformat()

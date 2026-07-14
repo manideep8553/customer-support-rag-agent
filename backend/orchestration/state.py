@@ -14,3 +14,5 @@ class ConversationState(TypedDict):
     sources: list[dict]
     next_node: str
     history_str: str
+    user_name: str
+    user_company: str

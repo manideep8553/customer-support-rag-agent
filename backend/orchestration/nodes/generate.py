@@ -7,6 +7,10 @@ from backend.cache import response_cache, token_cache
 from backend.security import reinforce_grounding
 from backend.orchestration.nodes.answers import (
     answer_refund, answer_shipping, answer_contact,
+    answer_warranty, answer_password, answer_upgrade,
+    answer_cancellation, answer_billing, answer_trial,
+    answer_privacy, answer_pricing, answer_licensing,
+    answer_sla, answer_nonprofit, answer_general,
 )
 
 logger = logging.getLogger("gigacorp.generate")
@@ -180,7 +184,7 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
     return "\n".join(parts)
 
 
-def _build_rag_prompt(query: str, context: str, history: str) -> tuple[str, str]:
+def _build_rag_prompt(query: str, context: str, history: str, user_name: str = "", user_company: str = "") -> tuple[str, str]:
     user_prompt = f"""{"=" * 60}
 RETRIEVED KNOWLEDGE:
 {context}
@@ -196,7 +200,12 @@ CURRENT QUESTION: {query}
 
 {"=" * 60
 }Follow the system instructions above. Answer:"""
-    return RAG_SYSTEM_PROMPT, user_prompt
+    system = RAG_SYSTEM_PROMPT
+    if user_name:
+        system += f"\n\nThe user's name is {user_name}. Use their name occasionally to personalize responses."
+    if user_company:
+        system += f"\n\nThe user is from {user_company}. Reference their company when relevant."
+    return system, user_prompt
 
 
 def _format_sources(docs: list[dict]) -> list[dict]:
@@ -220,12 +229,35 @@ INTENT_ANSWER_FN: dict[str, callable] = {
     "refund": answer_refund,
     "shipping": answer_shipping,
     "contact": answer_contact,
+    "warranty": answer_warranty,
+    "password": answer_password,
+    "upgrade": answer_upgrade,
+    "cancellation": answer_cancellation,
+    "billing": answer_billing,
+    "trial": answer_trial,
+    "privacy": answer_privacy,
+    "pricing": answer_pricing,
+    "licensing": answer_licensing,
+    "sla": answer_sla,
+    "nonprofit": answer_nonprofit,
+    "general": answer_general,
 }
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
     "refund": ["return", "refund", "money back"],
     "shipping": ["shipping", "delivery", "ship", "track order", "where is my order", "order status"],
     "contact": ["contact", "support", "phone", "email support", "customer service", "talk to"],
+    "pricing": ["price", "cost", "pricing", "how much"],
+    "billing": ["bill", "payment", "invoice"],
+    "warranty": ["warrant"],
+    "password": ["password", "reset"],
+    "upgrade": ["upgrade", "downgrade"],
+    "cancellation": ["cancel", "close account", "delete account"],
+    "trial": ["trial", "free"],
+    "privacy": ["privacy", "gdpr", "data"],
+    "licensing": ["license"],
+    "sla": ["sla", "uptime"],
+    "nonprofit": ["nonprofit", "non-profit", "discount"],
 }
 
 
@@ -244,6 +276,8 @@ def build_generate_node(llm=None, memory=None):
         context = state.get("context", "")
         has_relevant = bool(docs)
         session_id = state.get("session_id", "")
+        user_name = state.get("user_name", "")
+        user_company = state.get("user_company", "")
 
         # Pass through pre-set answer (e.g., from greeting handler, error fallback)
         existing_answer = state.get("answer", "")
@@ -252,12 +286,17 @@ def build_generate_node(llm=None, memory=None):
             return {"answer": existing_answer, "sources": sources}
 
         # Fast-path: rule-based answer for known intents (no LLM call needed)
+        intent = state.get("intent", "") or _match_fast_intent(query) or ""
         if not llm or not has_relevant:
-            intent = _match_fast_intent(query)
-            if intent and intent in INTENT_ANSWER_FN:
+            if intent in INTENT_ANSWER_FN:
                 sources = _format_sources(docs)
                 result = INTENT_ANSWER_FN[intent](state)
-                return {"answer": result.get("answer", ""), "sources": sources}
+                answer = result.get("answer", "")
+                # Personalize rule-based answer with user name
+                if user_name and answer.startswith("Here are") or answer.startswith("According to"):
+                    answer = answer.replace("Here are", f"Here are, {user_name},")
+                    answer = answer.replace("According to GigaCorp", f"According to GigaCorp's policies, {user_name},")
+                return {"answer": answer, "sources": sources}
 
         if llm and has_relevant:
             context_preview = context[:200] if context else ""
@@ -272,7 +311,7 @@ def build_generate_node(llm=None, memory=None):
             try:
                 safe_query = reinforce_grounding(query)
                 history = _build_history(memory, session_id, llm, safe_query)
-                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history)
+                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history, user_name, user_company)
                 answer = llm.generate(user_prompt, system_prompt=system_prompt)
                 response_cache.set(session_id, query, context_preview, answer)
             except Exception as e:

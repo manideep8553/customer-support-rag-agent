@@ -70,13 +70,13 @@ class SessionInfo(BaseModel):
 
 
 class HistoryRequest(BaseModel):
-    session_id: str = Field(..., min_length=1, max_length=64, description="Session identifier")
+    session_id: str = Field(default="", max_length=64, description="Session identifier")
     limit: int = Field(default=50, ge=1, le=200, description="Max messages to return")
 
     @field_validator("session_id")
     @classmethod
     def validate_session_id(cls, v: str) -> str:
-        if not SESSION_ID_RE.match(v):
+        if v and not SESSION_ID_RE.match(v):
             raise ValueError("session_id must contain only letters, digits, hyphens, underscores, or dots")
         return v
 

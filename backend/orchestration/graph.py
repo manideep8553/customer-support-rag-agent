@@ -101,18 +101,23 @@ GREETING_RESPONSES: dict[str, str] = {
 def _build_greeting_node(llm=None):
     def respond_greeting(state: ConversationState) -> dict:
         query = state.get("query", "").strip().lower()
-        logger.debug("Greeting response for: '%s'", query)
+        user_name = state.get("user_name", "")
+        logger.debug("Greeting response for: '%s' (user: %s)", query, user_name or "anonymous")
 
         if llm:
             try:
+                greeting = f"the user ({user_name})" if user_name else "a user"
                 prompt = (
-                    f"The user said: '{query}'. "
+                    f"{greeting} said: '{query}'. "
                     f"Respond naturally and warmly as a friendly AI customer support assistant named GigaBot. "
                     f"Keep it concise (1-2 sentences) and invite them to ask about GigaCorp's products and services."
                 )
+                system = "You are GigaBot, a friendly and professional AI customer support assistant for GigaCorp."
+                if user_name:
+                    system += f" The user's name is {user_name}. Use their name occasionally to personalize responses."
                 answer = llm.generate(
                     prompt,
-                    system_prompt="You are GigaBot, a friendly and professional AI customer support assistant for GigaCorp.",
+                    system_prompt=system,
                 )
                 return {"answer": answer, "sources": []}
             except Exception as e:
@@ -124,6 +129,11 @@ def _build_greeting_node(llm=None):
             if key in query and key != "default":
                 answer = response
                 break
+
+        if user_name and answer.startswith("Hello"):
+            answer = f"Hello, {user_name}! I'm GigaBot, your AI support assistant. How can I help you today?"
+        elif user_name and answer.startswith("Hi"):
+            answer = f"Hi {user_name}! Welcome to GigaCorp Support. What can I help you with?"
 
         return {"answer": answer, "sources": []}
 
@@ -143,11 +153,17 @@ class SupportGraph:
         self.llm = llm
         self.graph = build_support_graph(vector_store, llm=llm, memory=memory_backend)
 
-    def query(self, session_id: str, message: str) -> dict:
+    def query(self, session_id: str, message: str, user_info: dict | None = None) -> dict:
         try:
             self.memory.add_turn(session_id, "user", message)
         except Exception as e:
             logger.warning("Failed to store user message for session %s: %s", session_id, e)
+
+        history_messages = self.get_history(session_id)
+        history_str = "\n".join(
+            f"{'Customer' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in history_messages[-6:]
+        )
 
         initial_state: ConversationState = {
             "messages": [],
@@ -159,7 +175,9 @@ class SupportGraph:
             "answer": "",
             "sources": [],
             "next_node": "",
-            "history_str": "",
+            "history_str": history_str,
+            "user_name": user_info.get("display_name", "") if user_info else "",
+            "user_company": user_info.get("company", "") if user_info else "",
         }
         config = {"configurable": {"thread_id": session_id}}
 
@@ -180,9 +198,9 @@ class SupportGraph:
 
         return {"answer": answer, "sources": sources}
 
-    async def query_stream(self, session_id: str, message: str) -> AsyncIterator[str]:
+    async def query_stream(self, session_id: str, message: str, user_info: dict | None = None) -> AsyncIterator[str]:
         try:
-            result = self.query(session_id, message)
+            result = self.query(session_id, message, user_info=user_info)
         except Exception as e:
             log_exception(e, "SupportGraph.query_stream")
             yield f"data: {json.dumps({'type': 'error', 'detail': 'Failed to process query'})}\n\n"
@@ -190,30 +208,30 @@ class SupportGraph:
 
         answer = result.get("answer", "")
         sources = result.get("sources", [])
-        yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+        yield json.dumps({'type': 'sources', 'sources': sources})
         for token in self._tokenize(answer):
-            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+            yield json.dumps({'type': 'token', 'content': token})
+        yield json.dumps({'type': 'done', 'session_id': session_id})
 
-    async def query_stream_llm(self, session_id: str, message: str) -> AsyncIterator[str]:
+    async def query_stream_llm(self, session_id: str, message: str, user_info: dict | None = None) -> AsyncIterator[str]:
         if not self.llm:
-            async for chunk in self.query_stream(session_id, message):
+            async for chunk in self.query_stream(session_id, message, user_info=user_info):
                 yield chunk
             return
 
         try:
-            result = self.query(session_id, message)
+            result = self.query(session_id, message, user_info=user_info)
         except Exception as e:
             log_exception(e, "SupportGraph.query_stream_llm")
-            yield f"data: {json.dumps({'type': 'error', 'detail': 'Failed to process query'})}\n\n"
+            yield json.dumps({'type': 'error', 'detail': 'Failed to process query'})
             return
 
         sources = result.get("sources", [])
-        yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+        yield json.dumps({'type': 'sources', 'sources': sources})
         answer = result.get("answer", "")
         for token in self._tokenize(answer):
-            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+            yield json.dumps({'type': 'token', 'content': token})
+        yield json.dumps({'type': 'done', 'session_id': session_id})
 
     def _tokenize(self, text: str) -> list[str]:
         if not text:

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.config import settings
 from backend.di.container import container
 from backend.api.routes import build_router
+from backend.auth.router import router as auth_router
 from backend.core.events import event_bus
 from backend.core.registry import registry
 from backend.errors import (
@@ -49,6 +50,14 @@ async def lifespan(app: FastAPI):
     _setup_event_handlers()
 
     try:
+        from backend.auth.database import init_db
+        await init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        log_exception(e, "lifespan.database")
+        logger.warning("Database init failed (will retry on first request): %s", e)
+
+    try:
         container.preload()
     except Exception as e:
         log_exception(e, "lifespan.preload")
@@ -75,6 +84,11 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    try:
+        from backend.auth.database import close_db
+        await close_db()
+    except Exception as e:
+        logger.warning("Database shutdown error: %s", e)
     logger.info("Shutting down GigaCorp RAG Agent...")
 
 
@@ -91,7 +105,7 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
     return JSONResponse(
         status_code=422,
         content=ErrorDetail(
-            detail="; ".join(f"{'.'.join(e['loc'])}: {e['msg']}" for e in exc.errors()),
+            detail="; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()),
             code="VALIDATION_ERROR",
         ).model_dump(),
     )
@@ -130,6 +144,7 @@ app.add_middleware(
 )
 
 router = build_router(container.orchestrator, container.kb_manager)
+app.include_router(auth_router)
 app.include_router(router, prefix="/api/v1")
 
 frontend_paths = [

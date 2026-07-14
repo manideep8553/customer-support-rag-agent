@@ -52,6 +52,8 @@ from backend.security import (
     sanitize_text,
     validate_file_path,
 )
+from backend.auth.dependencies import get_optional_user
+from backend.auth.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -107,14 +109,15 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             500: {"description": "Internal server error"},
         },
     )
-    async def chat(request: ChatRequest):
+    async def chat(request: ChatRequest, current_user: User = Depends(get_optional_user)):
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
         sanitized_message = sanitize_text(request.message, max_length=2000)
         start = time.monotonic()
+        user_info = {"display_name": current_user.display_name, "company": current_user.company} if current_user else None
         try:
-            result = orch.query(request.session_id, sanitized_message)
+            result = orch.query(request.session_id, sanitized_message, user_info=user_info)
         except GigaCorpError as e:
             log_exception(e, "chat.gigacorp_error")
             raise HTTPException(status_code=500, detail=friendly_error(e))
@@ -147,15 +150,16 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             422: {"description": "Validation error"},
         },
     )
-    async def chat_stream(request: ChatRequest):
+    async def chat_stream(request: ChatRequest, current_user: User = Depends(get_optional_user)):
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
         sanitized_message = sanitize_text(request.message, max_length=2000)
+        user_info = {"display_name": current_user.display_name, "company": current_user.company} if current_user else None
 
         async def event_generator():
             try:
-                async for event in orch.query_stream_llm(request.session_id, sanitized_message):
+                async for event in orch.query_stream_llm(request.session_id, sanitized_message, user_info=user_info):
                     yield event
             except Exception as e:
                 logger.exception("Stream error for session %s", request.session_id)
@@ -271,8 +275,7 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         },
     )
     async def get_history(session_id: str, body: HistoryRequest = Body(default=None)):
-        if not body:
-            body = HistoryRequest(session_id=session_id)
+        limit = body.limit if body else 50
         messages = orch.get_history(session_id)
         if not messages:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found or has no messages")
@@ -282,7 +285,7 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
                 content=m["content"],
                 timestamp=datetime.fromisoformat(m["timestamp"]) if isinstance(m.get("timestamp"), str) else _now(),
             )
-            for m in messages[-body.limit:]
+            for m in messages[-limit:]
         ]
         return HistoryResponse(session_id=session_id, messages=entries)
 

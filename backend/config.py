@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
     top_k_retrieval: int = 4
-    similarity_threshold: float = 0.45
+    similarity_threshold: float = 0.28
 
     vector_store_type: str = "faiss"
 
@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = True
+
+    # PostgreSQL
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/gigacorp"
+    database_echo: bool = False
+    database_pool_size: int = 10
+    database_max_overflow: int = 20
+
+    # JWT
+    jwt_secret_key: str = "change-me-to-a-secure-random-string-at-least-32-chars"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 7
 
     class Config:
         env_file = ".env"
