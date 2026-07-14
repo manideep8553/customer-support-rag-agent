@@ -4,6 +4,7 @@ from backend.orchestration.state import ConversationState
 from backend.config import settings
 from backend.errors import log_exception
 from backend.cache import response_cache, token_cache
+from backend.security import reinforce_grounding
 
 logger = logging.getLogger("gigacorp.generate")
 
@@ -288,8 +289,9 @@ def build_generate_node(llm=None, memory=None):
 
             answer = LLM_UNAVAILABLE_MSG
             try:
-                history = _build_history(memory, session_id, llm, query)
-                system_prompt, user_prompt = _build_rag_prompt(query, context, history)
+                safe_query = reinforce_grounding(query)
+                history = _build_history(memory, session_id, llm, safe_query)
+                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history)
                 answer = llm.generate(user_prompt, system_prompt=system_prompt)
                 response_cache.set(session_id, query, context_preview, answer)
             except Exception as e:

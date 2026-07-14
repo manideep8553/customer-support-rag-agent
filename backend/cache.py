@@ -70,6 +70,10 @@ class EmbeddingCache:
         key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._cache.set(key, embedding)
 
+    @property
+    def size(self) -> int:
+        return len(self._cache)
+
     def clear(self) -> None:
         self._cache.clear()
 
@@ -96,6 +100,10 @@ class ResponseCache:
         key = self._make_key(session_id, query, context_preview)
         self._cache.set(key, response)
 
+    @property
+    def size(self) -> int:
+        return len(self._cache)
+
     def clear(self) -> None:
         self._cache.clear()
 
@@ -113,6 +121,10 @@ class TokenCache:
     def set(self, text: str, count: int) -> None:
         key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._cache.set(key, count)
+
+    @property
+    def size(self) -> int:
+        return len(self._cache)
 
     def clear(self) -> None:
         self._cache.clear()

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from traceback import format_exception
 
-from fastapi import APIRouter, HTTPException, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
@@ -44,6 +44,14 @@ from backend.errors import (
     log_exception,
 )
 from backend.cache import embedding_cache, response_cache, token_cache
+from backend.security import (
+    verify_api_key,
+    chat_rate_limiter,
+    ingest_rate_limiter,
+    get_client_ip,
+    sanitize_text,
+    validate_file_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +89,7 @@ def _session_info_to_schema(info: SessionInfo) -> SessionInfoSchema:
 
 
 def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(dependencies=[Depends(verify_api_key)])
 
     # ── Exception Handler ──────────────────────────────────────────────
     @router.exception_handler(ValidationError)
@@ -117,8 +125,13 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         )
 
     # ── Chat ───────────────────────────────────────────────────────────
+    async def _chat_rate_limit(request: Request):
+        client_ip = get_client_ip(request)
+        chat_rate_limiter.check(client_ip)
+
     @router.post(
         "/chat",
+        dependencies=[Depends(_chat_rate_limit)],
         response_model=ChatResponse,
         responses={
             200: {"description": "Successful response with answer and sources"},
@@ -131,9 +144,10 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+        sanitized_message = sanitize_text(request.message, max_length=2000)
         start = time.monotonic()
         try:
-            result = orch.query(request.session_id, request.message)
+            result = orch.query(request.session_id, sanitized_message)
         except GigaCorpError as e:
             log_exception(e, "chat.gigacorp_error")
             raise HTTPException(status_code=500, detail=friendly_error(e))
@@ -158,6 +172,7 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
     # ── Chat Stream ────────────────────────────────────────────────────
     @router.post(
         "/chat/stream",
+        dependencies=[Depends(_chat_rate_limit)],
         response_class=EventSourceResponse,
         responses={
             200: {"description": "Server-Sent Events stream of tokens and sources"},
@@ -169,13 +184,15 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+        sanitized_message = sanitize_text(request.message, max_length=2000)
+
         async def event_generator():
             try:
-                async for event in orch.query_stream_llm(request.session_id, request.message):
+                async for event in orch.query_stream_llm(request.session_id, sanitized_message):
                     yield event
             except Exception as e:
                 logger.exception("Stream error for session %s", request.session_id)
-                yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'detail': 'An error occurred processing your request.'})}\n\n"
 
         return EventSourceResponse(event_generator())
 
@@ -375,19 +392,25 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
     )
     async def cache_stats():
         return {
-            "embedding_cache": len(embedding_cache._cache) if hasattr(embedding_cache, "_cache") else 0,
-            "response_cache": len(response_cache._cache) if hasattr(response_cache, "_cache") else 0,
-            "token_cache": len(token_cache._cache) if hasattr(token_cache, "_cache") else 0,
+            "embedding_cache": embedding_cache.size,
+            "response_cache": response_cache.size,
+            "token_cache": token_cache.size,
         }
 
     # ── Ingest ─────────────────────────────────────────────────────────
+    async def _ingest_rate_limit(request: Request):
+        client_ip = get_client_ip(request)
+        ingest_rate_limiter.check(client_ip)
+
     @router.post(
         "/ingest",
+        dependencies=[Depends(_ingest_rate_limit)],
         response_model=IngestResponse,
         status_code=201,
         responses={
             201: {"description": "Documents ingested"},
             400: {"description": "Invalid request"},
+            403: {"description": "File path outside allowed directory"},
             404: {"description": "File not found"},
             422: {"description": "Validation error"},
         },
@@ -400,14 +423,11 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             )
         try:
             if request.file_path:
-                if not Path(request.file_path).exists():
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"File not found: {request.file_path}",
-                    )
-                result = kb_manager.ingest_file(request.file_path)
+                validated_path = validate_file_path(request.file_path)
+                result = kb_manager.ingest_file(str(validated_path))
             elif request.text:
-                result = kb_manager.ingest_text(request.text)
+                sanitized = sanitize_text(request.text, max_length=100000)
+                result = kb_manager.ingest_text(sanitized)
             else:
                 result = kb_manager.ingest_file()
             return IngestResponse(**result)
@@ -490,26 +510,15 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
     async def health():
         try:
             kb_status = kb_manager.status()
-            memory_info = {
-                "backend": settings.memory_backend,
-                "active_sessions": len(orch.list_sessions()),
-            }
-            llm_info = {
-                "provider": settings.llm_provider or "rule-based",
-                "model": settings.llm_model or "n/a",
-            }
-            embedding_info = {
-                "provider": settings.embedding_provider,
-                "model": settings.embedding_model,
-            }
             return {
                 "status": "healthy",
                 "app_name": settings.app_name,
                 "app_version": settings.app_version,
-                "knowledge_base": kb_status,
-                "memory": memory_info,
-                "llm": llm_info,
-                "embeddings": embedding_info,
+                "knowledge_base": {
+                    "initialized": kb_status.get("initialized", False),
+                    "chunk_count": kb_status.get("chunk_count", 0),
+                },
+                "active_sessions": len(orch.list_sessions()),
                 "timestamp": _now().isoformat(),
             }
         except Exception as e:
@@ -518,7 +527,6 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
                 status_code=503,
                 content={
                     "status": "unhealthy",
-                    "detail": str(e),
                     "timestamp": _now().isoformat(),
                 },
             )

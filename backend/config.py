@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 
+    api_key: str = ""
+
     llm_provider: str = ""
     llm_model: str = ""
     openai_api_key: str = ""

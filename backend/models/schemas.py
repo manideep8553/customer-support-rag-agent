@@ -1,6 +1,10 @@
+import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime, timezone
+
+
+SESSION_ID_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
 
 
 class SourceCitation(BaseModel):
@@ -17,9 +21,16 @@ class MessageEntry(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    session_id: str = Field(..., description="Unique session identifier")
+    session_id: str = Field(..., min_length=1, max_length=64, description="Unique session identifier")
     message: str = Field(..., min_length=1, max_length=2000, description="User message")
     stream: bool = Field(default=False, description="Enable streaming response")
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        if not SESSION_ID_RE.match(v):
+            raise ValueError("session_id must contain only letters, digits, hyphens, underscores, or dots")
+        return v
 
     @field_validator("message")
     @classmethod
@@ -41,7 +52,14 @@ class ChatResponse(BaseModel):
 
 
 class SessionCreate(BaseModel):
-    session_id: Optional[str] = Field(default=None, description="Optional existing session ID to resume")
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=64, description="Optional existing session ID to resume")
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not SESSION_ID_RE.match(v):
+            raise ValueError("session_id must contain only letters, digits, hyphens, underscores, or dots")
+        return v
 
 
 class SessionInfo(BaseModel):
@@ -52,8 +70,15 @@ class SessionInfo(BaseModel):
 
 
 class HistoryRequest(BaseModel):
-    session_id: str = Field(..., description="Session identifier")
+    session_id: str = Field(..., min_length=1, max_length=64, description="Session identifier")
     limit: int = Field(default=50, ge=1, le=200, description="Max messages to return")
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        if not SESSION_ID_RE.match(v):
+            raise ValueError("session_id must contain only letters, digits, hyphens, underscores, or dots")
+        return v
 
 
 class HistoryResponse(BaseModel):
@@ -61,9 +86,19 @@ class HistoryResponse(BaseModel):
     messages: list[MessageEntry] = Field(default_factory=list)
 
 
+PATH_TRAVERSAL_RE = re.compile(r'\.\.[/\\]')
+
+
 class IngestRequest(BaseModel):
-    file_path: Optional[str] = Field(default=None, description="Absolute path to a file to ingest")
-    text: Optional[str] = Field(default=None, min_length=1, description="Raw text to chunk and ingest")
+    file_path: Optional[str] = Field(default=None, min_length=1, max_length=1024, description="Path to a file to ingest (within knowledge base)")
+    text: Optional[str] = Field(default=None, min_length=1, max_length=100000, description="Raw text to chunk and ingest")
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and PATH_TRAVERSAL_RE.search(v):
+            raise ValueError("file_path must not contain path traversal sequences (..)")
+        return v
 
     @field_validator("text")
     @classmethod
