@@ -6,15 +6,22 @@ from backend.orchestration.state import ConversationState
 logger = logging.getLogger("gigacorp.route")
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
-    "order_status": ["track order", "where is my order", "order status", "my order", "tracking"],
+    "tracking": ["track package", "track my package", "where is my package",
+                 "package location", "shipment status", "my shipment",
+                 "tracking update", "where is my shipment", "when will it arrive",
+                 "has my order shipped", "package tracking"],
+    "invoice": ["invoice for", "get an invoice", "my invoice", "receipt for", "billing history"],
+    "refund": ["refund", "money back"],
+    "return_policy": ["return policy", "how to return", "return an item", "rma", "return label"],
+    "exchange": ["exchange", "swap", "replace", "different product", "different size"],
+    "order_status": ["track my order", "where is my order", "order status", "tracking number", "cancel my order", "cancel my pending", "what happened to ord", "order number"],
     "loyalty": ["loyalty", "points", "rewards", "loyalty tier", "my tier", "my points"],
-    "refund": ["return", "refund", "money back"],
     "shipping": ["shipping", "delivery", "ship"],
     "warranty": ["warrant"],
     "password": ["password", "reset"],
     "upgrade": ["upgrade", "downgrade"],
-    "cancellation": ["cancel", "close account", "delete account"],
-    "billing": ["bill", "payment", "invoice", "subscription"],
+    "cancellation": ["cancel account", "close account", "delete account"],
+    "billing": ["bill", "payment", "subscription"],
     "trial": ["trial", "free"],
     "privacy": ["privacy", "gdpr", "data"],
     "contact": ["contact", "support", "phone"],
@@ -26,9 +33,21 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
 
 PRONOUN_RE = re.compile(r'\b(it|there|they|that|this|these|those|them|here)\b', re.I)
 
+TRACKING_RE = re.compile(
+    r'\b(1Z\s*[A-Z0-9\s]{10,30}|'
+    r'[0-9]{4}\s*[0-9]{4}\s*[0-9]{4}\s*[0-9]{4}\s*[0-9]{4}|'
+    r'[0-9]{20,30}|'
+    r'DHL[-\s][A-Z0-9]{6,15}|'
+    r'[A-Z]{2}[0-9]{9}[A-Z]{2})\b',
+    re.I
+)
+
 FOLLOW_UP_KEYWORDS: dict[str, list[str]] = {
-    "refund": ["return", "refund", "money"],
-    "shipping": ["ship", "delivery", "track", "order", "cost", "price", "fee", "rate"],
+    "refund": ["refund", "money"],
+    "return_policy": ["return", "rma", "label"],
+    "exchange": ["exchange", "swap", "replace"],
+    "invoice": ["invoice", "receipt", "bill"],
+    "shipping": ["ship", "delivery", "track", "cost", "fee", "rate"],
     "pricing": ["cost", "price", "pricing", "fee", "much", "how much"],
     "billing": ["bill", "payment", "invoice", "charge", "subscription"],
     "warranty": ["warrant", "repair", "replace"],
@@ -38,6 +57,7 @@ FOLLOW_UP_KEYWORDS: dict[str, list[str]] = {
     "contact": ["contact", "support", "phone", "email"],
     "order_status": ["track", "order", "status", "delivery"],
     "loyalty": ["points", "loyalty", "tier", "rewards"],
+    "tracking": ["track", "package", "shipment", "delivery", "shipping update"],
 }
 
 
@@ -109,6 +129,11 @@ def build_route_node():
 
             logger.debug("Route: pronoun but no context -> general")
             return {"intent": "general", "next_node": "general"}
+
+        # Check for tracking numbers in the query
+        if TRACKING_RE.search(query):
+            logger.debug("Route: tracking number detected -> tracking")
+            return {"intent": "tracking", "next_node": "tracking"}
 
         # Direct keyword match (no pronoun)
         for intent, keywords in INTENT_KEYWORDS.items():

@@ -34,6 +34,10 @@ INTENT_NODES = {
     "nonprofit": answer_nodes.answer_nonprofit,
     "order_status": answer_nodes.answer_order_status,
     "loyalty": answer_nodes.answer_loyalty,
+    "invoice": answer_nodes.answer_invoice,
+    "return_policy": answer_nodes.answer_return_policy,
+    "exchange": answer_nodes.answer_exchange,
+    "tracking": answer_nodes.answer_tracking,
     "general": answer_nodes.answer_general,
 }
 

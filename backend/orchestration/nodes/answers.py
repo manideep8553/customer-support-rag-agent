@@ -1,3 +1,6 @@
+import re
+from typing import Optional
+
 from backend.orchestration.state import ConversationState
 
 
@@ -326,6 +329,147 @@ def answer_nonprofit(state: ConversationState) -> dict:
     )}
 
 
+def answer_invoice(state: ConversationState) -> dict:
+    customer = _cd(state)
+    orders = customer.get("recent_orders", [])
+    inv_block = ""
+    for o in orders[:3]:
+        pmt = "Paid" if o.get("status") in ("delivered", "shipped", "confirmed") else "Pending"
+        inv_block += (
+            f"• **{o['order_number']}**: ${o['total']:.2f} — {pmt}\n"
+            f"  Items: {', '.join(i['product_name'] for i in o.get('items', []))}\n"
+        )
+    return {"answer": (
+        "**Your Invoices & Billing Summary**\n\n"
+        f"{inv_block}\n"
+        "Invoices are available in the Customer Portal under 'Billing History' as downloadable PDFs. "
+        "You can access invoices for the last 24 months.\n\n"
+        "To download a specific invoice, visit portal.gigacorp.com/invoices or contact support."
+    )}
+
+
+def answer_return_policy(state: ConversationState) -> dict:
+    customer = _cd(state)
+    orders = customer.get("recent_orders", [])
+    returnable = [o for o in orders if o.get("status") in ("delivered", "shipped")]
+    ret_block = ""
+    if returnable:
+        ret_block = "\n\n**Orders eligible for return:**\n"
+        for o in returnable[:2]:
+            items_str = ", ".join(i['product_name'] for i in o.get('items', []))
+            ret_block += f"• {o['order_number']} — {items_str}\n"
+    return {"answer": (
+        "**GigaCorp Return Policy**\n\n"
+        "• **Return Window:** 30 days from delivery for most products; 15 days for opened hardware\n"
+        "• **Condition:** Items must be in original packaging with all accessories\n"
+        "• **RMA Required:** A Return Merchandise Authorization (RMA) number is needed before shipping returns\n"
+        "• **Restocking Fee:** 15% on opened hardware items\n"
+        "• **Processing:** Refunds issued within 5-10 business days after inspection\n\n"
+        "To start a return, contact Customer Support or submit a request in the Customer Portal. "
+        "You will receive an RMA number and prepaid return label via email."
+        f"{ret_block}"
+    )}
+
+
+def answer_exchange(state: ConversationState) -> dict:
+    customer = _cd(state)
+    orders = customer.get("recent_orders", [])
+    exch_block = ""
+    for o in orders:
+        for i in o.get("items", []):
+            if i.get("product_category") == "Hardware":
+                exch_block += f"• {o['order_number']} — {i['product_name']}\n"
+    hardware_block = ""
+    if exch_block:
+        hardware_block = f"\n\n**Hardware items in your recent orders eligible for exchange:**\n{exch_block}"
+    return {"answer": (
+        "**GigaCorp Exchange Policy**\n\n"
+        "• **Eligibility:** Hardware items within 30 days of delivery can be exchanged\n"
+        "• **Condition:** Items must be in original packaging with all accessories\n"
+        "• **Process:** You will receive a prepaid return label. Replacement ships after the returned item is inspected.\n"
+        "• **Price Difference:** If the replacement costs more, the difference must be paid. "
+        "If it costs less, the difference is refunded.\n"
+        "• **Expedited Exchange:** Available for premium customers — replacement ships immediately with a hold on your payment method."
+        f"{hardware_block}\n\n"
+        "To start an exchange, contact Customer Support with your order number and desired replacement product."
+    )}
+
+
+TRACKING_NUMBER_RE = re.compile(r'\b([A-Z0-9]{6,30})\b')
+
+
+def _find_tracking_number(query: str, customer: dict) -> Optional[str]:
+    numbers = TRACKING_NUMBER_RE.findall(query.upper())
+    shipments = customer.get("shipments", [])
+    for num in numbers:
+        for s in shipments:
+            if s.get("tracking_number", "").upper() == num:
+                return s["tracking_number"]
+            if num in s.get("tracking_number", "").upper():
+                return s["tracking_number"]
+    return None
+
+
+def answer_tracking(state: ConversationState) -> dict:
+    customer = _cd(state)
+    query = state.get("query", "")
+    shipments = customer.get("shipments", [])
+
+    matched_tn = _find_tracking_number(query, customer)
+    target = None
+    if matched_tn:
+        for s in shipments:
+            if s["tracking_number"] == matched_tn:
+                target = s
+                break
+
+    if not target and shipments:
+        target = shipments[0]
+
+    if not target:
+        return {"answer": (
+            "I don't see any active shipments on your account. "
+            "If you have a tracking number, please share it and I can look it up for you."
+        )}
+
+    status_icons = {
+        "pre_transit": "📋", "in_transit": "🚚",
+        "out_for_delivery": "📬", "delivered": "✅",
+        "exception": "⚠️", "returned": "↩️",
+        "available_for_pickup": "📮",
+    }
+    icon = status_icons.get(target["status"], "•")
+
+    base = (
+        f"{icon} **Shipment Status:** {target['status_label']}\n"
+        f"📦 **Carrier:** {target['courier']}\n"
+        f"🔢 **Tracking:** {target['tracking_number']}\n"
+    )
+    if target.get("current_location"):
+        base += f"📍 **Current Location:** {target['current_location']}\n"
+    if target.get("estimated_delivery"):
+        base += f"📅 **Estimated Delivery:** {target['estimated_delivery']}\n"
+    if target.get("last_update"):
+        base += f"🕐 **Last Updated:** {target['last_update']}\n"
+    if target.get("order_number"):
+        base += f"🛒 **Order:** {target['order_number']}\n"
+
+    if target["status"] == "pre_transit":
+        detail = "\nYour package has been registered in the shipping system but is not yet with the carrier. It will be picked up soon."
+    elif target["status"] == "in_transit":
+        detail = "\nYour package is on its way and moving through the carrier network. Check back for the next location update."
+    elif target["status"] == "out_for_delivery":
+        detail = "\nYour package is out for delivery today! Please ensure someone is available to receive it."
+    elif target["status"] == "delivered":
+        detail = "\nYour package has been delivered successfully."
+    elif target["status"] == "exception":
+        detail = "\nThere is a delivery exception. Please contact the carrier or our support team for assistance."
+    else:
+        detail = ""
+
+    return {"answer": f"{base}{detail}"}
+
+
 def answer_order_status(state: ConversationState) -> dict:
     customer = _cd(state)
     orders = customer.get("recent_orders", [])
@@ -335,7 +479,7 @@ def answer_order_status(state: ConversationState) -> dict:
             "please contact our support team at support@gigacorp.com for assistance."
         )}
     order_block = ""
-    for o in orders[:3]:
+    for o in orders:
         status_icon = {
             "pending": "⏳", "confirmed": "✅", "processing": "🔧",
             "shipped": "📦", "delivered": "📬", "cancelled": "❌", "refunded": "💰",

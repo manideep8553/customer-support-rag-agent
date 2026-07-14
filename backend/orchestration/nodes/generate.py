@@ -12,6 +12,8 @@ from backend.orchestration.nodes.answers import (
     answer_privacy, answer_pricing, answer_licensing,
     answer_sla, answer_nonprofit, answer_general,
     answer_order_status, answer_loyalty,
+    answer_invoice, answer_return_policy, answer_exchange,
+    answer_tracking,
 )
 
 logger = logging.getLogger("gigacorp.generate")
@@ -251,6 +253,9 @@ LLM_UNAVAILABLE_MSG = (
 
 INTENT_ANSWER_FN: dict[str, callable] = {
     "refund": answer_refund,
+    "return_policy": answer_return_policy,
+    "exchange": answer_exchange,
+    "invoice": answer_invoice,
     "shipping": answer_shipping,
     "contact": answer_contact,
     "warranty": answer_warranty,
@@ -266,21 +271,30 @@ INTENT_ANSWER_FN: dict[str, callable] = {
     "nonprofit": answer_nonprofit,
     "order_status": answer_order_status,
     "loyalty": answer_loyalty,
+    "tracking": answer_tracking,
     "general": answer_general,
 }
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
-    "order_status": ["track order", "where is my order", "order status", "my order", "tracking"],
+    "tracking": ["track package", "track my package", "where is my package",
+                 "package location", "shipment status", "my shipment",
+                 "tracking update", "where is my shipment", "when will it arrive",
+                 "has my order shipped", "package tracking"],
+    "invoice": ["invoice for", "get an invoice", "my invoice", "receipt for", "billing history"],
+    "refund": ["refund", "money back"],
+    "return_policy": ["return policy", "how to return", "return an item", "rma", "return label"],
+    "exchange": ["exchange", "swap", "replace", "different product", "different size"],
+    "order_status": ["track my order", "where is my order", "order status", "tracking number", "cancel my order", "cancel my pending", "what happened to ord", "order number"],
     "loyalty": ["loyalty", "points", "rewards", "loyalty tier", "my tier", "my points"],
-    "refund": ["return", "refund", "money back"],
+    "refund": ["refund", "money back"],
     "shipping": ["shipping", "delivery", "ship"],
     "contact": ["contact", "support", "phone", "email support", "customer service", "talk to"],
     "pricing": ["price", "cost", "pricing", "how much"],
-    "billing": ["bill", "payment", "invoice", "subscription"],
+    "billing": ["bill", "payment", "subscription"],
     "warranty": ["warrant"],
     "password": ["password", "reset"],
     "upgrade": ["upgrade", "downgrade"],
-    "cancellation": ["cancel", "close account", "delete account"],
+    "cancellation": ["cancel account", "close account", "delete account"],
     "trial": ["trial", "free"],
     "privacy": ["privacy", "gdpr", "data"],
     "licensing": ["license"],
