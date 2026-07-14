@@ -172,6 +172,15 @@ class SupportGraph:
             for m in history_messages[-6:]
         )
 
+        discussed_entities: dict = {}
+        if hasattr(self.memory, "get_state"):
+            try:
+                previous_state = self.memory.get_state(session_id)
+                if isinstance(previous_state, dict):
+                    discussed_entities = previous_state.get("discussed_entities", {}) or {}
+            except Exception as e:
+                logger.debug("Could not load state for session %s: %s", session_id, e)
+
         customer_data = (user_info or {}).get("customer_data", {}) or {}
         initial_state: ConversationState = {
             "messages": [],
@@ -187,6 +196,7 @@ class SupportGraph:
             "user_name": user_info.get("display_name", "") if user_info else "",
             "user_company": user_info.get("company", "") if user_info else "",
             "customer_data": customer_data,
+            "discussed_entities": discussed_entities,
         }
         config = {"configurable": {"thread_id": session_id}}
 
@@ -199,6 +209,13 @@ class SupportGraph:
 
         answer = result.get("answer", "")
         sources = result.get("sources", [])
+
+        updated_discussed = result.get("discussed_entities")
+        if updated_discussed and hasattr(self.memory, "update_state"):
+            try:
+                self.memory.update_state(session_id, {"discussed_entities": updated_discussed})
+            except Exception as e:
+                logger.debug("Could not save discussed_entities for session %s: %s", session_id, e)
 
         try:
             self.memory.add_turn(session_id, "assistant", answer)

@@ -414,12 +414,21 @@ def answer_tracking(state: ConversationState) -> dict:
     customer = _cd(state)
     query = state.get("query", "")
     shipments = customer.get("shipments", [])
+    discussed = state.get("discussed_entities", {}) or {}
+    orders = customer.get("recent_orders", [])
+    new_entities = dict(discussed)
 
     matched_tn = _find_tracking_number(query, customer)
     target = None
     if matched_tn:
         for s in shipments:
             if s["tracking_number"] == matched_tn:
+                target = s
+                break
+
+    if not target and discussed.get("order"):
+        for s in shipments:
+            if s.get("order_number") == discussed["order"]:
                 target = s
                 break
 
@@ -430,7 +439,12 @@ def answer_tracking(state: ConversationState) -> dict:
         return {"answer": (
             "I don't see any active shipments on your account. "
             "If you have a tracking number, please share it and I can look it up for you."
-        )}
+        ), "discussed_entities": new_entities}
+
+    if target.get("tracking_number"):
+        new_entities["tracking"] = target["tracking_number"]
+    if target.get("order_number"):
+        new_entities["order"] = target["order_number"]
 
     status_icons = {
         "pre_transit": "📋", "in_transit": "🚚",
@@ -467,7 +481,28 @@ def answer_tracking(state: ConversationState) -> dict:
     else:
         detail = ""
 
-    return {"answer": f"{base}{detail}"}
+    return {"answer": f"{base}{detail}", "discussed_entities": new_entities}
+
+
+ORDER_NUMBER_RE = re.compile(r'\b(ORD-\d{4}-\d{3})\b', re.I)
+
+
+def _resolve_order_number(query: str, orders: list[dict], discussed: dict) -> str | None:
+    q = query.upper()
+    m = ORDER_NUMBER_RE.search(q)
+    if m:
+        return m.group(1).upper()
+
+    prev_order = discussed.get("order")
+    if prev_order:
+        for o in orders:
+            if o["order_number"] == prev_order:
+                return prev_order
+
+    if len(orders) == 1:
+        return orders[0]["order_number"]
+
+    return None
 
 
 def answer_order_status(state: ConversationState) -> dict:
@@ -478,6 +513,40 @@ def answer_order_status(state: ConversationState) -> dict:
             "I don't see any recent orders on your account. If you believe this is an error, "
             "please contact our support team at support@gigacorp.com for assistance."
         )}
+
+    discussed = state.get("discussed_entities", {}) or {}
+    query = state.get("query", "")
+    resolved_order = _resolve_order_number(query, orders, discussed)
+    new_entities = dict(discussed)
+
+    if resolved_order:
+        new_entities["order"] = resolved_order
+        matched = [o for o in orders if o["order_number"] == resolved_order]
+        if matched:
+            o = matched[0]
+            status_icon = {
+                "pending": "⏳", "confirmed": "✅", "processing": "🔧",
+                "shipped": "📦", "delivered": "📬", "cancelled": "❌", "refunded": "💰",
+            }.get(o["status"], "•")
+            tracking = ""
+            if o.get("tracking_number"):
+                tracking = f" — Tracking: {o['tracking_number']}"
+                if o.get("carrier"):
+                    tracking += f" ({o['carrier']})"
+            eta = ""
+            if o.get("estimated_delivery"):
+                eta = f" — Est. delivery: {o['estimated_delivery']}"
+            items_str = ", ".join(i["product_name"] for i in o.get("items", []))
+            return {"answer": (
+                f"{status_icon} **{o['order_number']}** — {o['status'].title()}"
+                f"{tracking}{eta}\n"
+                f"  Items: {items_str}\n"
+                f"  Total: ${o['total']:.2f}\n\n"
+                "You can view full order details and history in the Customer Portal."
+            ), "discussed_entities": new_entities}
+    else:
+        new_entities.pop("order", None)
+
     order_block = ""
     for o in orders:
         status_icon = {
@@ -502,7 +571,7 @@ def answer_order_status(state: ConversationState) -> dict:
     return {"answer": (
         f"Here are your recent orders:\n\n{order_block}"
         "You can view full order details and history in the Customer Portal."
-    )}
+    ), "discussed_entities": new_entities}
 
 
 def answer_loyalty(state: ConversationState) -> dict:
@@ -550,16 +619,58 @@ PRIORITY_LABELS = {
 }
 
 
+TICKET_NUMBER_RE = re.compile(r'\b(TKT-\d{4}-\d{4})\b', re.I)
+
+
 def answer_ticket(state: ConversationState) -> dict:
     customer = _cd(state)
+    query = state.get("query", "")
     open_tickets = customer.get("open_tickets", [])
     all_tickets = customer.get("all_tickets", open_tickets)
+    discussed = state.get("discussed_entities", {}) or {}
+    new_entities = dict(discussed)
+
     if not all_tickets:
         return {"answer": (
             "You don't have any support tickets on your account. "
             "If you need help, you can create a new ticket through the Customer Portal "
             "or contact our support team at support@gigacorp.com."
-        )}
+        ), "discussed_entities": new_entities}
+
+    matched_tn = None
+    q = query.upper()
+    m = TICKET_NUMBER_RE.search(q)
+    if m:
+        matched_tn = m.group(1).upper()
+
+    prev_ticket = discussed.get("ticket") if not matched_tn else None
+    single_ticket = None
+    if matched_tn:
+        for t in all_tickets:
+            if t["ticket_number"] == matched_tn:
+                single_ticket = t
+                break
+    elif prev_ticket:
+        for t in all_tickets:
+            if t["ticket_number"] == prev_ticket:
+                single_ticket = t
+                break
+
+    if single_ticket:
+        new_entities["ticket"] = single_ticket["ticket_number"]
+        icon = STATUS_ICONS.get(single_ticket.get("status", ""), "•")
+        pri = PRIORITY_LABELS.get(single_ticket.get("priority", ""), single_ticket.get("priority", ""))
+        return {"answer": (
+            f"{icon} **{single_ticket['ticket_number']}** — {single_ticket['subject'][:100]}\n"
+            f"   Status: {single_ticket.get('status_label', single_ticket['status'].replace('_', ' ').title())} "
+            f"| Priority: {pri}\n"
+            f"   Category: {single_ticket.get('category', 'N/A')}\n"
+            f"   Opened: {single_ticket.get('opened_at', 'N/A')}\n"
+            + (f"   Assigned to: {single_ticket['assigned_to']}\n" if single_ticket.get("assigned_to") else "")
+            + "You can view full details in the Customer Portal."
+        ), "discussed_entities": new_entities}
+
+    new_entities.pop("ticket", None)
     ticket_block = ""
     for t in all_tickets[:5]:
         icon = STATUS_ICONS.get(t.get("status", ""), "•")
@@ -579,7 +690,7 @@ def answer_ticket(state: ConversationState) -> dict:
         f"{ticket_block}"
         "You can view full ticket details, add comments, or create new tickets "
         "in the Customer Portal at support.gigacorp.com."
-    )}
+    ), "discussed_entities": new_entities}
 
 
 def answer_general(state: ConversationState) -> dict:

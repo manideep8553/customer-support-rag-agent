@@ -187,7 +187,7 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
     return "\n".join(parts)
 
 
-def _build_rag_prompt(query: str, context: str, history: str, user_name: str = "", user_company: str = "", customer_data: dict | None = None) -> tuple[str, str]:
+def _build_rag_prompt(query: str, context: str, history: str, user_name: str = "", user_company: str = "", customer_data: dict | None = None, discussed_entities: dict | None = None) -> tuple[str, str]:
     user_prompt = f"""{"=" * 60}
 RETRIEVED KNOWLEDGE:
 {context}
@@ -231,6 +231,11 @@ CURRENT QUESTION: {query}
                 items_str = ", ".join(i['product_name'] for i in o.get('items', []))
                 system += f"  - {o['order_number']}: {o['status'].title()} - {items_str}\n"
         system += "\nUse this customer data to provide personalized responses when relevant. Do not fabricate data not present here."
+    if discussed_entities:
+        system += "\n\n--- CURRENTLY DISCUSSED (entities referenced in this conversation) ---\n"
+        for key, val in discussed_entities.items():
+            system += f"  {key}: {val}\n"
+        system += "If the user's question refers to 'it', 'the order', 'the package', 'the ticket', etc. without explicitly naming it, use this context to infer which entity they mean. Update this context with new entities when you identify them in the user's question.\n"
     return system, user_prompt
 
 
@@ -325,12 +330,13 @@ def build_generate_node(llm=None, memory=None):
         user_name = state.get("user_name", "")
         user_company = state.get("user_company", "")
         customer_data = state.get("customer_data", {}) or {}
+        discussed_entities = state.get("discussed_entities", {}) or {}
 
         # Pass through pre-set answer (e.g., from greeting handler, error fallback)
         existing_answer = state.get("answer", "")
         if existing_answer:
             sources = _format_sources(docs)
-            return {"answer": existing_answer, "sources": sources}
+            return {"answer": existing_answer, "sources": sources, "discussed_entities": dict(discussed_entities)}
 
         # Fast-path: rule-based answer for known intents (no LLM call needed)
         intent = state.get("intent", "") or _match_fast_intent(query) or ""
@@ -339,6 +345,7 @@ def build_generate_node(llm=None, memory=None):
                 sources = _format_sources(docs)
                 result = INTENT_ANSWER_FN[intent](state)
                 answer = result.get("answer", "")
+                discussed = result.get("discussed_entities", discussed_entities)
                 # Personalize rule-based answer with user name
                 if user_name:
                     if answer.startswith("Here are"):
@@ -347,7 +354,7 @@ def build_generate_node(llm=None, memory=None):
                         answer = answer.replace("According to GigaCorp", f"According to GigaCorp's policies, {user_name},")
                     elif answer.startswith("Your") or answer.startswith("Per"):
                         pass
-                return {"answer": answer, "sources": sources}
+                return {"answer": answer, "sources": sources, "discussed_entities": dict(discussed)}
 
         if llm and has_relevant:
             context_preview = context[:200] if context else ""
@@ -356,13 +363,15 @@ def build_generate_node(llm=None, memory=None):
             cached = response_cache.get(session_id, query, context_preview)
             if cached is not None:
                 sources = _format_sources(docs)
-                return {"answer": cached, "sources": sources}
+                return {"answer": cached, "sources": sources, "discussed_entities": dict(discussed_entities)}
 
             answer = LLM_UNAVAILABLE_MSG
             try:
                 safe_query = reinforce_grounding(query)
                 history = _build_history(memory, session_id, llm, safe_query)
-                system_prompt, user_prompt = _build_rag_prompt(safe_query, context, history, user_name, user_company, customer_data)
+                system_prompt, user_prompt = _build_rag_prompt(
+                    safe_query, context, history, user_name, user_company, customer_data, discussed_entities,
+                )
                 answer = llm.generate(user_prompt, system_prompt=system_prompt)
                 response_cache.set(session_id, query, context_preview, answer)
             except Exception as e:
@@ -379,5 +388,5 @@ def build_generate_node(llm=None, memory=None):
                 answer = NO_INFO_MSG
 
         sources = _format_sources(docs)
-        return {"answer": answer, "sources": sources}
+        return {"answer": answer, "sources": sources, "discussed_entities": dict(discussed_entities)}
     return generate

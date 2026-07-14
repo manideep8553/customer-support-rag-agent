@@ -110,10 +110,19 @@ def _find_follow_up_match(query: str, history: str) -> str | None:
     return matched_intents[0]
 
 
+def _resolve_intent_from_discussed(discussed: dict) -> str | None:
+    if discussed.get("order") or discussed.get("tracking"):
+        return "tracking"
+    if discussed.get("ticket"):
+        return "ticket"
+    return None
+
+
 def build_route_node():
     def route(state: ConversationState) -> dict:
         query = state.get("query", "").lower()
         history = state.get("history_str", "") or ""
+        discussed = state.get("discussed_entities", {}) or {}
 
         has_pronoun = bool(PRONOUN_RE.search(query))
 
@@ -124,7 +133,11 @@ def build_route_node():
                 logger.debug("Route: follow-up '%s' -> %s", query[:30], follow_up)
                 return {"intent": follow_up, "next_node": follow_up}
 
-            # No keyword match in follow-up — defer to history context
+            discussed_intent = _resolve_intent_from_discussed(discussed)
+            if discussed_intent:
+                logger.debug("Route: pronoun resolved via discussed_entities -> %s", discussed_intent)
+                return {"intent": discussed_intent, "next_node": discussed_intent}
+
             last_intent = _find_last_intent_in_history(history)
             if last_intent:
                 logger.debug("Route: pronoun context fallback -> %s", last_intent)
@@ -143,6 +156,14 @@ def build_route_node():
             if any(kw in query for kw in keywords):
                 logger.debug("Route: direct match '%s' -> %s", query[:30], intent)
                 return {"intent": intent, "next_node": intent}
+
+        # No keyword matched — check if discussed_entities can disambiguate
+        discussed_intent = _resolve_intent_from_discussed(discussed)
+        if discussed_intent:
+            for kw in FOLLOW_UP_KEYWORDS.get(discussed_intent, []):
+                if kw in query:
+                    logger.debug("Route: discussed_entities fallback -> %s", discussed_intent)
+                    return {"intent": discussed_intent, "next_node": discussed_intent}
 
         logger.debug("Route: no match, default -> general")
         return {"intent": "general", "next_node": "general"}
