@@ -65,11 +65,11 @@ def build_support_graph(vector_store: VectorStore, llm=None, memory=None) -> Sta
 
     workflow.set_entry_point("classify")
 
-    # Classify → greeting (no RAG) or support (RAG)
+    # Classify → greeting (no RAG), DB-only (skip retrieve), or support (RAG)
     workflow.add_conditional_edges(
         "classify",
         route_after_classify,
-        {"respond_greeting": "respond_greeting", "retrieve": "retrieve"},
+        {"respond_greeting": "respond_greeting", "retrieve": "retrieve", "route": "route"},
     )
 
     # Greeting path: respond → generate → END
