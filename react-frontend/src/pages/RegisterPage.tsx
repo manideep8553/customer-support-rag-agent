@@ -29,6 +29,7 @@ export function RegisterPage() {
     setLoading(true)
     try {
       await register(email, username, password, displayName || undefined)
+      window.location.href = '/'
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || 'Registration failed')
     } finally {

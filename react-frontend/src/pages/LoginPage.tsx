@@ -16,6 +16,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
+      window.location.href = '/'
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || 'Login failed')
     } finally {

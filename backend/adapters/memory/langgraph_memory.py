@@ -195,10 +195,12 @@ class LangGraphMemory(Memory):
             return count
 
     def _purge_expired(self):
-        for sid in list(self._sessions.keys()):
-            s = self._sessions[sid]
-            if self._is_expired(s):
-                self.delete_session(sid)
+        expired = [sid for sid, s in self._sessions.items() if self._is_expired(s)]
+        for sid in expired:
+            del self._sessions[sid]
+            path = self._sessions_dir / f"{sid}.json"
+            if path.exists():
+                path.unlink()
 
     def _save_session(self, session_id: str) -> None:
         data = self._sessions.get(session_id)

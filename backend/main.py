@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -247,10 +247,24 @@ frontend_paths = [
     Path(__file__).resolve().parent.parent / "react-frontend" / "dist",
     Path(__file__).resolve().parent.parent / "frontend",
 ]
+frontend_dist: Path | None = None
 for fp in frontend_paths:
     if fp.exists():
-        app.mount("/", StaticFiles(directory=str(fp), html=True), name="frontend")
+        frontend_dist = fp
         break
+
+if frontend_dist:
+    # SPA catch-all: serve static files directly, fall back to index.html for client-side routing
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        file_path = (frontend_dist / full_path).resolve()
+        try:
+            file_path.relative_to(frontend_dist.resolve())
+        except ValueError:
+            return FileResponse(str(frontend_dist / "index.html"))
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(frontend_dist / "index.html"))
 
 if __name__ == "__main__":
     uvicorn.run(
