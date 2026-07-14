@@ -20,6 +20,27 @@ export interface Message {
   timestamp: string
 }
 
+const TITLE_CACHE_KEY = 'gc_chat_titles'
+const MAX_TITLE_LEN = 40
+
+function loadTitles(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(TITLE_CACHE_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function saveTitles(titles: Record<string, string>) {
+  localStorage.setItem(TITLE_CACHE_KEY, JSON.stringify(titles))
+}
+
+function generateTitle(text: string): string {
+  const clean = text.replace(/[^a-zA-Z0-9\s?.,!-]/g, '').trim()
+  if (clean.length <= MAX_TITLE_LEN) return clean
+  return clean.slice(0, clean.lastIndexOf(' ', MAX_TITLE_LEN)) + '…'
+}
+
 export function useChat() {
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -27,10 +48,20 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [titles, setTitles] = useState<Record<string, string>>(loadTitles)
   const abortRef = useRef<(() => void) | null>(null)
   const msgIdCounter = useRef(0)
 
   const nextId = () => `msg_${++msgIdCounter.current}`
+
+  const updateTitle = useCallback((sessionId: string, text: string) => {
+    setTitles((prev) => {
+      if (prev[sessionId]) return prev
+      const updated = { ...prev, [sessionId]: generateTitle(text) }
+      saveTitles(updated)
+      return updated
+    })
+  }, [])
 
   const loadSessions = useCallback(async () => {
     try {
@@ -94,6 +125,7 @@ export function useChat() {
         timestamp: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, userMsg])
+      updateTitle(sid, text)
 
       const assistantMsg: Message = {
         id: nextId(),
@@ -152,7 +184,7 @@ export function useChat() {
         }
       )
     },
-    [ensureSession, isStreaming]
+    [ensureSession, isStreaming, updateTitle]
   )
 
   const deleteSessionById = useCallback(
@@ -189,5 +221,6 @@ export function useChat() {
     switchSession,
     deleteSession: deleteSessionById,
     loadSessions,
+    titles,
   }
 }

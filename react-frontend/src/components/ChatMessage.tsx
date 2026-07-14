@@ -1,13 +1,15 @@
+import { useState } from 'react'
 import { type Message } from '@/hooks/useChat'
-import { type SourceCitation } from '@/api/client'
-import { Bot, User, ChevronRight } from 'lucide-react'
+import { Bot, User, Copy, Check, RefreshCw } from 'lucide-react'
+import { MarkdownRenderer } from './MarkdownRenderer'
+import { SourceCitations } from './SourceCitations'
 
 interface ChatMessageProps {
   message: Message
-  onSourceClick: (sources: NonNullable<Message['sources']>) => void
+  isLast: boolean
 }
 
-function formatTimestamp(ts: string) {
+function formatTime(ts: string) {
   try {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   } catch {
@@ -15,77 +17,79 @@ function formatTimestamp(ts: string) {
   }
 }
 
-function sourceMeta(s: SourceCitation) {
-  const m = s.metadata || {}
-  return {
-    heading: (m.heading as string) || '',
-    doc: (m.source as string) || s.source || 'Document',
-  }
-}
-
-export function ChatMessage({ message, onSourceClick }: ChatMessageProps) {
+export function ChatMessage({ message, isLast }: ChatMessageProps) {
   const isUser = message.role === 'user'
+  const [copied, setCopied] = useState(false)
+  const isEmpty = !message.content && message.role === 'assistant' && isLast
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(message.content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
-    <div className={`flex gap-3 mb-6 animate-fade-in ${isUser ? 'flex-row-reverse' : ''}`}>
-      <div
-        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-          isUser
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-indigo-100 text-primary'
-        }`}
-      >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+    <div className={`group flex gap-3 px-1 py-3 md:py-4 animate-fade-slide-in ${isUser ? '' : 'bg-secondary/30 rounded-lg -mx-1 md:-mx-2 px-2 md:px-3'}`}>
+      {/* Avatar */}
+      <div className="flex-shrink-0 mt-0.5">
+        {isUser ? (
+          <div className="w-7 h-7 rounded-full bg-foreground/10 flex items-center justify-center">
+            <User className="h-3.5 w-3.5 text-foreground/60" />
+          </div>
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+            <Bot className="h-3.5 w-3.5 text-primary" />
+          </div>
+        )}
       </div>
 
-      <div className={`max-w-[85%] ${isUser ? 'text-right' : ''}`}>
-        <div
-          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
-            isUser
-              ? 'bg-primary text-primary-foreground rounded-br-sm'
-              : 'bg-secondary text-foreground rounded-bl-sm'
-          }`}
-        >
-          {message.content || (message.role === 'assistant' ? '...' : '')}
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-semibold text-foreground/80">
+            {isUser ? 'You' : 'GigaBot'}
+          </span>
+          <span className="text-[10px] text-muted-foreground/60">
+            {formatTime(message.timestamp)}
+          </span>
         </div>
 
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-3 space-y-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Sources
-            </p>
-            {message.sources.map((s, i) => {
-              const meta = sourceMeta(s)
-              return (
-                <button
-                  key={i}
-                  onClick={() => onSourceClick(message.sources!)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors text-left cursor-pointer"
-                >
-                  <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-xs font-medium truncate">
-                      {meta.heading || 'Untitled Section'}
-                    </span>
-                    <span className="block text-[10px] text-muted-foreground truncate">
-                      {meta.doc}
-                    </span>
-                  </span>
-                  <span className="text-[10px] font-semibold text-primary flex-shrink-0">
-                    {(s.score * 100).toFixed(0)}%
-                  </span>
-                  <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                </button>
-              )
-            })}
+        {/* Message body */}
+        {isEmpty ? (
+          <div className="flex items-center gap-1.5 text-muted-foreground/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" style={{ animationDelay: '0s' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" style={{ animationDelay: '0.2s' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" style={{ animationDelay: '0.4s' }} />
+          </div>
+        ) : (
+          <div className="text-sm leading-relaxed text-foreground/90 prose prose-sm dark:prose-invert max-w-none">
+            <MarkdownRenderer content={message.content} />
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground mt-1 px-1">
-          {formatTimestamp(message.timestamp)}
-        </p>
+        {/* Source citations */}
+        {message.sources && message.sources.length > 0 && !isUser && (
+          <div className="mt-3 animate-slide-up">
+            <SourceCitations sources={message.sources} />
+          </div>
+        )}
+
+        {/* Actions bar */}
+        {message.content && !isUser && (
+          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            >
+              {copied ? (
+                <><Check className="h-3 w-3" /> Copied</>
+              ) : (
+                <><Copy className="h-3 w-3" /> Copy</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

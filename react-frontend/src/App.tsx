@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChat } from '@/hooks/useChat'
 import { Sidebar } from '@/components/Sidebar'
 import { ChatMessage } from '@/components/ChatMessage'
 import { ChatInput } from '@/components/ChatInput'
 import { WelcomeScreen } from '@/components/WelcomeScreen'
-import { SourceModal } from '@/components/SourceModal'
 import { TypingIndicator } from '@/components/TypingIndicator'
 import { type SourceCitation } from '@/api/client'
-import { Menu, Monitor, Loader2 } from 'lucide-react'
+import { Menu, Sun, Moon } from 'lucide-react'
 
 export default function App() {
   const {
@@ -23,26 +22,40 @@ export default function App() {
     deleteSession,
   } = useChat()
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sourceModalOpen, setSourceModalOpen] = useState(false)
-  const [selectedSources, setSelectedSources] = useState<SourceCitation[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [dark, setDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isStreaming])
+    document.documentElement.classList.toggle('dark', dark)
+  }, [dark])
 
-  const handleSourceClick = (sources: SourceCitation[]) => {
-    setSelectedSources(sources)
-    setSourceModalOpen(true)
-  }
+  const scrollToBottom = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, isStreaming, scrollToBottom])
+
+  const hasMessages = messages.length > 0
+  const showWelcome = !isLoading && !hasMessages
 
   return (
     <div className="h-screen flex overflow-hidden bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -51,91 +64,106 @@ export default function App() {
       <div
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 fixed md:relative z-50 md:z-auto transition-transform duration-200`}
+        } md:translate-x-0 fixed md:relative z-50 md:z-auto transition-transform duration-200 ease-in-out`}
       >
         <Sidebar
           sessions={sessions}
           currentSessionId={currentSessionId}
           onNewSession={newSession}
-          onSwitchSession={switchSession}
+          onSwitchSession={(id) => {
+            switchSession(id)
+            setSidebarOpen(false)
+          }}
           onDeleteSession={deleteSession}
+          onSuggestionClick={(text) => send(text)}
         />
       </div>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="flex items-center gap-3 px-4 md:px-6 py-3 border-b bg-card shrink-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Top bar */}
+        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 shrink-0 border-b bg-background/80 backdrop-blur-sm sticky top-0 z-30">
           <button
             className="md:hidden p-1.5 rounded-md hover:bg-secondary text-muted-foreground"
             onClick={() => setSidebarOpen(!sidebarOpen)}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-base font-semibold">Customer Support</h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">
-              GigaCorp AI RAG Agent — Ask me anything about our products and policies
-            </p>
-          </div>
-          <div className="ml-auto">
-            {currentSessionId && (
-              <span className="text-xs text-muted-foreground bg-secondary px-3 py-1.5 rounded-full">
-                {currentSessionId.slice(0, 8)}...
-              </span>
-            )}
+          <h1 className="text-sm font-semibold text-foreground/80">GigaBot</h1>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => setDark(!dark)}
+              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"
+            >
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
           </div>
         </header>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 scrollbar-thin">
-          {isLoading && !messages.length && (
-            <div className="flex justify-center items-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {/* Messages area */}
+        <div
+          ref={scrollContainerRef}
+          className={`flex-1 overflow-y-auto scrollbar-thin ${
+            showWelcome ? 'flex items-center justify-center' : ''
+          }`}
+        >
+          <div
+            className={`w-full ${
+              hasMessages
+                ? 'py-4 md:py-8 space-y-1'
+                : 'py-0'
+            }`}
+          >
+            {showWelcome && (
+              <WelcomeScreen onSuggestionClick={(text) => send(text)} />
+            )}
+
+            {isLoading && !hasMessages && (
+              <div className="flex justify-center py-20">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+
+            <div className={`${hasMessages ? 'max-w-[var(--chat-width)] mx-auto px-3 md:px-4' : ''}`}>
+              {messages.map((msg, i) => (
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  isLast={i === messages.length - 1}
+                />
+              ))}
+
+              {isStreaming && (
+                <div className="animate-fade-slide-in">
+                  <TypingIndicator />
+                </div>
+              )}
+
+              {error && (
+                <div className="text-center text-destructive text-sm py-3 px-4 mx-auto max-w-md">
+                  {error}
+                </div>
+              )}
             </div>
-          )}
 
-          {!isLoading && messages.length === 0 && !currentSessionId && (
-            <WelcomeScreen onSuggestionClick={(text) => send(text)} />
-          )}
-
-          {!isLoading && messages.length === 0 && currentSessionId && (
-            <WelcomeScreen onSuggestionClick={(text) => send(text)} />
-          )}
-
-          {messages.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              onSourceClick={handleSourceClick}
-            />
-          ))}
-
-          {isStreaming && !messages[messages.length - 1]?.content && (
-            <TypingIndicator />
-          )}
-
-          {error && (
-            <div className="text-center text-destructive text-sm py-4">{error}</div>
-          )}
-
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
-        {/* Input */}
-        <ChatInput
-          onSend={send}
-          disabled={isLoading}
-          streaming={isStreaming}
-        />
+        {/* Input area - always at bottom */}
+        <div className="shrink-0 border-t bg-background">
+          <div className="max-w-[var(--chat-width)] mx-auto px-3 md:px-4 py-3">
+            <ChatInput
+              onSend={send}
+              disabled={isLoading}
+              streaming={isStreaming}
+            />
+            <p className="text-center text-[11px] text-muted-foreground/60 mt-2 select-none">
+              Responses are AI-generated based on GigaCorp's knowledge base. Verify critical information.
+            </p>
+          </div>
+        </div>
       </div>
-
-      {/* Source Modal */}
-      <SourceModal
-        open={sourceModalOpen}
-        onOpenChange={setSourceModalOpen}
-        sources={selectedSources}
-      />
     </div>
   )
 }

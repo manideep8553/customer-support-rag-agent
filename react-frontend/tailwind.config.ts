@@ -3,18 +3,8 @@ import animate from 'tailwindcss-animate'
 
 const config: Config = {
   darkMode: ['class'],
-  content: [
-    './index.html',
-    './src/**/*.{ts,tsx}',
-  ],
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
-    container: {
-      center: true,
-      padding: '2rem',
-      screens: {
-        '2xl': '1400px',
-      },
-    },
     extend: {
       colors: {
         border: 'hsl(var(--border))',
@@ -51,10 +41,11 @@ const config: Config = {
           foreground: 'hsl(var(--card-foreground))',
         },
         sidebar: {
-          DEFAULT: '#1e1e2e',
-          foreground: '#ffffff',
-          hover: '#2a2a3e',
-          active: '#363650',
+          DEFAULT: 'hsl(var(--sidebar-bg))',
+          foreground: 'hsl(var(--sidebar-fg))',
+          hover: 'hsl(var(--sidebar-hover))',
+          active: 'hsl(var(--sidebar-active))',
+          border: 'hsl(var(--sidebar-border))',
         },
       },
       borderRadius: {
@@ -63,18 +54,28 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       keyframes: {
-        'fade-in': {
-          from: { opacity: '0', transform: 'translateY(8px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+        'fade-slide-in': {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        'typing-dot': {
-          '0%, 60%, 100%': { transform: 'translateY(0)', opacity: '0.4' },
+        'pulse-dot': {
+          '0%, 60%, 100%': { transform: 'translateY(0)', opacity: '0.3' },
           '30%': { transform: 'translateY(-6px)', opacity: '1' },
+        },
+        'slide-up': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
       animation: {
-        'fade-in': 'fade-in 0.3s ease-out',
-        'typing-dot': 'typing-dot 1.4s infinite ease-in-out',
+        'fade-slide-in': 'fade-slide-in 0.3s ease-out',
+        'pulse-dot': 'pulse-dot 1.4s infinite ease-in-out',
+        'slide-up': 'slide-up 0.25s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out',
       },
     },
   },
