@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     host: str = "0.0.0.0"
     port: int = 8000
-    reload: bool = True
+    reload: bool = False
 
     # PostgreSQL
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/gigacorp"
@@ -109,7 +109,7 @@ class Settings(BaseSettings):
 
     # Enterprise: Logging
     log_level: str = "INFO"
-    log_format: str = "json"
+    log_format: str = "text"
     log_file: str = "logs/gigacorp.log"
     log_file_max_size_mb: int = 100
     log_file_backup_count: int = 10

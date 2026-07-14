@@ -31,6 +31,12 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_entry, default=str)
 
 
+TEXT_FORMATTER = logging.Formatter(
+    "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+
 def setup_logging():
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
@@ -44,10 +50,7 @@ def setup_logging():
     if settings.log_format == "json":
         console_handler.setFormatter(JSONFormatter())
     else:
-        console_handler.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        console_handler.setFormatter(TEXT_FORMATTER)
     root_logger.addHandler(console_handler)
 
     log_path = Path(settings.log_file)
