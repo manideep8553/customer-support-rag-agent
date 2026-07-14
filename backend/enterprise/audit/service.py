@@ -103,7 +103,7 @@ class AuditService:
         if outcome:
             conditions.append(AuditLog.outcome == outcome)
 
-        from sqlalchemy import func, and_
+        from sqlalchemy import and_, func
 
         query = select(AuditLog)
         if conditions:

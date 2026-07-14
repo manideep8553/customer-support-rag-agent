@@ -67,6 +67,7 @@ class EmailService:
         notification_data: Optional[dict] = None,
     ) -> bool:
         import uuid as _uuid
+
         from sqlalchemy import select
 
         from backend.auth.database import async_session_factory

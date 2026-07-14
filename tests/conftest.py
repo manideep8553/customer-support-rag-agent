@@ -22,7 +22,7 @@ settings.email_enabled = False
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def prepare_db():
     """Create all tables before any test runs."""
-    from backend.auth.database import init_db, close_db
+    from backend.auth.database import close_db, init_db
     await init_db()
     yield
     # Optionally drop: await drop_db()
