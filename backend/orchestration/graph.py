@@ -39,13 +39,13 @@ def route_after_classify(state: ConversationState) -> str:
     return intent if intent in INTENT_NODES else "general"
 
 
-def build_support_graph(vector_store: VectorStore, llm=None) -> StateGraph:
+def build_support_graph(vector_store: VectorStore, llm=None, memory=None) -> StateGraph:
     workflow = StateGraph(ConversationState)
     workflow.add_node("retrieve", build_retrieve_node(vector_store))
     workflow.add_node("route", build_route_node())
     for name in INTENT_NODES:
         workflow.add_node(name, INTENT_NODES[name])
-    workflow.add_node("generate", build_generate_node(llm=llm))
+    workflow.add_node("generate", build_generate_node(llm=llm, memory=memory))
     workflow.set_entry_point("retrieve")
     if llm:
         workflow.add_edge("retrieve", "generate")
@@ -64,10 +64,9 @@ class SupportGraph:
         self.vector_store = vector_store
         self.memory = memory_backend
         self.llm = llm
-        self.graph = build_support_graph(vector_store, llm=llm)
+        self.graph = build_support_graph(vector_store, llm=llm, memory=memory_backend)
 
     def query(self, session_id: str, message: str) -> dict:
-        history_str = self.memory.get_history(session_id)
         self.memory.add_turn(session_id, "user", message)
         initial_state: ConversationState = {
             "messages": [],
@@ -79,7 +78,7 @@ class SupportGraph:
             "answer": "",
             "sources": [],
             "next_node": "",
-            "history_str": history_str,
+            "history_str": "",
         }
         config = {"configurable": {"thread_id": session_id}}
         result = self.graph.invoke(initial_state, config=config)

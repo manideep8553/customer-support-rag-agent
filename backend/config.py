@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     memory_max_turns: int = 20
     session_timeout_minutes: int = 60
+    max_history_tokens: int = 2048
+    summarization_threshold_turns: int = 20
 
     host: str = "0.0.0.0"
     port: int = 8000

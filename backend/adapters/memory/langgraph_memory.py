@@ -33,6 +33,7 @@ class LangGraphMemory(Memory):
                 "last_active": now,
                 "messages": [],
                 "state": {},
+                "summary": "",
             }
             self._save_session(session_id)
         return session_id
@@ -53,10 +54,30 @@ class LangGraphMemory(Memory):
     def get_history(self, session_id: str) -> str:
         messages = self.get_messages(session_id)
         lines = []
+        summary = self.get_summary(session_id)
+        if summary:
+            lines.append(f"[Previous conversation summary: {summary}]")
         for msg in messages:
             role = "Customer" if msg["role"] == "user" else "Assistant"
             lines.append(f"{role}: {msg['content']}")
         return "\n".join(lines)
+
+    def summarize(self, session_id: str, summary: str) -> None:
+        if not summary:
+            return
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return
+            session["summary"] = summary
+            self._save_session(session_id)
+
+    def get_summary(self, session_id: str) -> str:
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return ""
+            return session.get("summary", "")
 
     def get_messages(self, session_id: str) -> list[dict]:
         with self._lock:
