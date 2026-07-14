@@ -4,20 +4,24 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.config import settings
 from backend.di.container import container
 from backend.api.routes import build_router
-from backend.api.v1 import v1_router
 from backend.core.events import event_bus
 from backend.core.registry import registry
-from backend.errors import ConfigurationError, log_exception
+from backend.errors import (
+    ConfigurationError, GigaCorpError, friendly_error, log_exception,
+)
 from backend.deploy.config import get_profile, configure_from_profile
+from backend.models.schemas import ErrorDetail
 
 logger = logging.getLogger("gigacorp")
 
@@ -81,6 +85,42 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=ErrorDetail(
+            detail="; ".join(f"{'.'.join(e['loc'])}: {e['msg']}" for e in exc.errors()),
+            code="VALIDATION_ERROR",
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(GigaCorpError)
+async def gigacorp_error_handler(request: Request, exc: GigaCorpError):
+    log_exception(exc, "GigaCorpError")
+    return JSONResponse(
+        status_code=500,
+        content=ErrorDetail(
+            detail=friendly_error(exc),
+            code=exc.code,
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception")
+    return JSONResponse(
+        status_code=500,
+        content=ErrorDetail(
+            detail="An unexpected error occurred. Please try again.",
+            code="INTERNAL_ERROR",
+        ).model_dump(),
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -102,11 +142,6 @@ for fp in frontend_paths:
         break
 
 if __name__ == "__main__":
-    profile_name = getattr(settings, "deploy_profile", "development")
-    profile = get_profile(profile_name)
-    configure_from_profile(profile)
-    logger.info("Deploy profile: %s", profile.name)
-
     uvicorn.run(
         "backend.main:app",
         host=settings.host,

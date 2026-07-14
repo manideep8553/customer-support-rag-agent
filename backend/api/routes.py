@@ -91,39 +91,6 @@ def _session_info_to_schema(info: SessionInfo) -> SessionInfoSchema:
 def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRouter:
     router = APIRouter(dependencies=[Depends(verify_api_key)])
 
-    # ── Exception Handler ──────────────────────────────────────────────
-    @router.exception_handler(ValidationError)
-    async def validation_exception_handler(request: Request, exc: ValidationError):
-        return JSONResponse(
-            status_code=422,
-            content=ErrorDetail(
-                detail="; ".join(f"{'.'.join(e['loc'])}: {e['msg']}" for e in exc.errors()),
-                code="VALIDATION_ERROR",
-            ).model_dump(),
-        )
-
-    @router.exception_handler(GigaCorpError)
-    async def gigacorp_error_handler(request: Request, exc: GigaCorpError):
-        log_exception(exc, "GigaCorpError")
-        return JSONResponse(
-            status_code=500,
-            content=ErrorDetail(
-                detail=friendly_error(exc),
-                code=exc.code,
-            ).model_dump(),
-        )
-
-    @router.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        logger.exception("Unhandled exception")
-        return JSONResponse(
-            status_code=500,
-            content=ErrorDetail(
-                detail="An unexpected error occurred. Please try again.",
-                code="INTERNAL_ERROR",
-            ).model_dump(),
-        )
-
     # ── Chat ───────────────────────────────────────────────────────────
     async def _chat_rate_limit(request: Request):
         client_ip = get_client_ip(request)

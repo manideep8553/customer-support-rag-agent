@@ -5,6 +5,9 @@ from backend.config import settings
 from backend.errors import log_exception
 from backend.cache import response_cache, token_cache
 from backend.security import reinforce_grounding
+from backend.orchestration.nodes.answers import (
+    answer_refund, answer_shipping, answer_contact,
+)
 
 logger = logging.getLogger("gigacorp.generate")
 
@@ -213,39 +216,10 @@ LLM_UNAVAILABLE_MSG = (
     "Please try again in a moment."
 )
 
-# Intent keywords for fast-path matching (avoids LLM call)
-INTENT_ANSWERS = {
-    "refund": (
-        "Based on GigaCorp's Return and Refund Policy (Section 1):\n\n"
-        "\u2022 **Standard Refund Window:** 30 days from purchase for software products and subscriptions. "
-        "After 30 days, refunds are prorated.\n"
-        "\u2022 **Hardware Returns:** 15 days from delivery in original packaging. A 15% restocking fee applies to opened items.\n"
-        "\u2022 **Enterprise Contracts:** 60-day cancellation window for full refund on annual contracts.\n"
-        "\u2022 **Processing Time:** Refunds are processed within 5-10 business days after inspection.\n\n"
-        "To request a refund, visit portal.gigacorp.com/refunds or contact Customer Support with your order number."
-    ),
-    "shipping": (
-        "According to GigaCorp's Shipping and Delivery Policy (Section 2):\n\n"
-        "\u2022 **Standard (5-8 business days):** Free for orders over $500, otherwise $12.99\n"
-        "\u2022 **Express (2-3 business days):** $24.99\n"
-        "\u2022 **Next-Day (1 business day):** $39.99\n\n"
-        "International shipping takes 7-14 business days via DHL or FedEx. "
-        "Customs duties and import taxes are the customer's responsibility.\n\n"
-        "Digital products are delivered via email within 1 hour of purchase. "
-        "Tracking information is sent via email once physical orders ship."
-    ),
-    "contact": (
-        "You can reach GigaCorp Customer Support through these channels:\n\n"
-        "\u2022 **Customer Portal:** support.gigacorp.com\n"
-        "\u2022 **Email:**\n"
-        "  - Basic: support@gigacorp.com\n"
-        "  - Priority: priority@gigacorp.com\n"
-        "  - Premium: premium@gigacorp.com\n"
-        "\u2022 **Phone:** +1 (555) 123-4567 (Premium customers only, 24/7)\n"
-        "\u2022 **Chat:** Available in the Customer Portal (Priority and Premium)\n\n"
-        "Support is available 24/7 for Premium customers. Basic support response times "
-        "are within 24 hours for critical issues."
-    ),
+INTENT_ANSWER_FN: dict[str, callable] = {
+    "refund": answer_refund,
+    "shipping": answer_shipping,
+    "contact": answer_contact,
 }
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
@@ -274,9 +248,10 @@ def build_generate_node(llm=None, memory=None):
         # Fast-path: rule-based answer for known intents (no LLM call needed)
         if not llm or not has_relevant:
             intent = _match_fast_intent(query)
-            if intent and intent in INTENT_ANSWERS:
+            if intent and intent in INTENT_ANSWER_FN:
                 sources = _format_sources(docs)
-                return {"answer": INTENT_ANSWERS[intent], "sources": sources}
+                result = INTENT_ANSWER_FN[intent](state)
+                return {"answer": result.get("answer", ""), "sources": sources}
 
         if llm and has_relevant:
             context_preview = context[:200] if context else ""
