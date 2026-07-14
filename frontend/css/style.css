@@ -406,34 +406,85 @@ html, body {
 
 /* Sources */
 .message-sources {
-  margin-top: 8px;
+  margin-top: 10px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sources-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 
 .source-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 500;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   cursor: pointer;
-  border: none;
-  transition: background var(--transition);
+  transition: all var(--transition);
+  text-align: left;
+  font-family: var(--font-sans);
 }
 
 .source-badge:hover {
-  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
-.source-score {
+.source-badge-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.source-badge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.source-badge-heading {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-badge-doc {
   font-size: 10px;
-  opacity: 0.6;
+  color: var(--color-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-badge-score {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 .message-time {
@@ -636,9 +687,28 @@ html, body {
 .source-item-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.source-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.source-item-score {
+  font-size: 11px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.source-item-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text-light);
   margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
 }
 
 .source-item-content {

@@ -209,6 +209,22 @@
     scrollToBottom();
   }
 
+  function getSourceMeta(s) {
+    const meta = s.metadata || {};
+    return {
+      doc: meta.source || s.source || 'Document',
+      heading: meta.heading || '',
+      chunk: meta.chunk_index !== undefined ? `#${meta.chunk_index + 1}` : '',
+    };
+  }
+
+  function formatSourceLabel(s, i) {
+    const meta = getSourceMeta(s);
+    let label = `[${i + 1}]`;
+    if (meta.heading) label += ` ${meta.heading}`;
+    return label;
+  }
+
   function addMessageToUI(role, text, sources, timestamp) {
     elements.welcomeMessage.classList.add('hidden');
 
@@ -224,12 +240,19 @@
       const sourcesJson = escapeHtml(JSON.stringify(sources));
       sourcesHtml = `
         <div class="message-sources">
-          ${sources.map((s, i) => `
+          <div class="sources-label">Sources</div>
+          ${sources.map((s, i) => {
+            const meta = getSourceMeta(s);
+            return `
             <button class="source-badge" data-sources='${sourcesJson}' data-index="${i}">
-              Source ${i + 1}
-              <span class="source-score">${(s.score * 100).toFixed(0)}%</span>
+              <span class="source-badge-num">${i + 1}</span>
+              <span class="source-badge-info">
+                <span class="source-badge-heading">${escapeHtml(meta.heading || 'Untitled Section')}</span>
+                <span class="source-badge-doc">${escapeHtml(meta.doc)} ${meta.chunk}</span>
+              </span>
+              <span class="source-badge-score">${(s.score * 100).toFixed(0)}%</span>
             </button>
-          `).join('')}
+          `}).join('')}
         </div>
       `;
     }
@@ -271,15 +294,21 @@
 
   function showSourceModal(sources) {
     const body = elements.sourceModalBody;
-    body.innerHTML = sources.map((s, i) => `
+    body.innerHTML = sources.map((s, i) => {
+      const meta = getSourceMeta(s);
+      return `
       <div class="source-item">
         <div class="source-item-header">
-          <span>Source ${i + 1}</span>
-          <span>Relevance: ${(s.score * 100).toFixed(0)}%</span>
+          <span class="source-item-title">${escapeHtml(meta.heading || 'Untitled Section')}</span>
+          <span class="source-item-score">${(s.score * 100).toFixed(0)}% match</span>
+        </div>
+        <div class="source-item-meta">
+          <span>${escapeHtml(meta.doc)}</span>
+          ${meta.chunk ? `<span>Chunk ${meta.chunk}</span>` : ''}
         </div>
         <div class="source-item-content">${escapeHtml(s.content)}</div>
       </div>
-    `).join('');
+    `}).join('');
     elements.sourceModal.classList.remove('hidden');
   }
 

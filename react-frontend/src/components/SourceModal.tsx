@@ -13,6 +13,15 @@ interface SourceModalProps {
   sources: SourceCitation[]
 }
 
+function sourceMeta(s: SourceCitation) {
+  const m = s.metadata || {}
+  return {
+    doc: (m.source as string) || s.source || 'Document',
+    heading: (m.heading as string) || '',
+    chunk: m.chunk_index !== undefined ? `#${(m.chunk_index as number) + 1}` : '',
+  }
+}
+
 export function SourceModal({ open, onOpenChange, sources }: SourceModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -21,23 +30,31 @@ export function SourceModal({ open, onOpenChange, sources }: SourceModalProps) {
           <DialogTitle>Sources</DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[55vh] pr-4">
-          {sources.map((source, i) => (
-            <div
-              key={i}
-              className="mb-4 pb-4 border-b last:border-b-0 last:mb-0 last:pb-0"
-            >
-              <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                <span>Source {i + 1}</span>
-                <span>Relevance: {(source.score * 100).toFixed(0)}%</span>
+          {sources.map((source, i) => {
+            const meta = sourceMeta(source)
+            return (
+              <div
+                key={i}
+                className="mb-4 pb-4 border-b last:border-b-0 last:mb-0 last:pb-0"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold">
+                    {meta.heading || 'Untitled Section'}
+                  </span>
+                  <span className="text-xs text-primary font-medium">
+                    {(source.score * 100).toFixed(0)}% match
+                  </span>
+                </div>
+                <div className="flex gap-2 text-xs text-muted-foreground mb-2">
+                  <span>{meta.doc}</span>
+                  {meta.chunk && <span>Chunk {meta.chunk}</span>}
+                </div>
+                <p className="text-sm bg-muted p-3 rounded-md leading-relaxed max-h-[120px] overflow-y-auto">
+                  {source.content}
+                </p>
               </div>
-              <p className="text-sm bg-muted p-3 rounded-md leading-relaxed max-h-[120px] overflow-y-auto">
-                {source.content}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Document: {source.source}
-              </p>
-            </div>
-          ))}
+            )
+          })}
         </ScrollArea>
       </DialogContent>
     </Dialog>

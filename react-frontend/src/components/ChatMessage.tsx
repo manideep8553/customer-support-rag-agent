@@ -1,6 +1,6 @@
 import { type Message } from '@/hooks/useChat'
-import { Badge } from '@/components/ui/badge'
-import { Bot, User } from 'lucide-react'
+import { type SourceCitation } from '@/api/client'
+import { Bot, User, ChevronRight } from 'lucide-react'
 
 interface ChatMessageProps {
   message: Message
@@ -12,6 +12,14 @@ function formatTimestamp(ts: string) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   } catch {
     return ''
+  }
+}
+
+function sourceMeta(s: SourceCitation) {
+  const m = s.metadata || {}
+  return {
+    heading: (m.heading as string) || '',
+    doc: (m.source as string) || s.source || 'Document',
   }
 }
 
@@ -42,18 +50,36 @@ export function ChatMessage({ message, onSourceClick }: ChatMessageProps) {
         </div>
 
         {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {message.sources.map((s, i) => (
-              <Badge
-                key={i}
-                variant="secondary"
-                className="cursor-pointer hover:bg-primary/20 text-xs"
-                onClick={() => onSourceClick(message.sources!)}
-              >
-                Source {i + 1}
-                <span className="ml-1 opacity-60">{(s.score * 100).toFixed(0)}%</span>
-              </Badge>
-            ))}
+          <div className="mt-3 space-y-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Sources
+            </p>
+            {message.sources.map((s, i) => {
+              const meta = sourceMeta(s)
+              return (
+                <button
+                  key={i}
+                  onClick={() => onSourceClick(message.sources!)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors text-left cursor-pointer"
+                >
+                  <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-medium truncate">
+                      {meta.heading || 'Untitled Section'}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground truncate">
+                      {meta.doc}
+                    </span>
+                  </span>
+                  <span className="text-[10px] font-semibold text-primary flex-shrink-0">
+                    {(s.score * 100).toFixed(0)}%
+                  </span>
+                  <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                </button>
+              )
+            })}
           </div>
         )}
 

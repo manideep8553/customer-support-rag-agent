@@ -6,6 +6,7 @@ export interface SourceCitation {
   content: string
   score: number
   source: string
+  metadata: Record<string, string | number>
 }
 
 export interface ChatResponse {

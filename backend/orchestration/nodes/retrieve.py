@@ -27,9 +27,13 @@ def _format_context(results: list[dict]) -> str:
         return "No relevant documents found."
     sections = []
     for i, r in enumerate(results, 1):
-        heading = r.get("metadata", {}).get("heading", "")
-        header = f"[Source {i}] (Relevance: {r['score']:.2f})"
+        meta = r.get("metadata", {})
+        doc = meta.get("source", r.get("source", "unknown"))
+        heading = meta.get("heading", "")
+        chunk_idx = meta.get("chunk_index", 0)
+        citation = f"[Source {i}: {doc}"
         if heading:
-            header += f" — {heading}"
-        sections.append(f"{header}\n{r['content']}")
+            citation += f" → {heading}"
+        citation += f"] (Relevance: {r['score']:.2f})"
+        sections.append(f"{citation}\n{r['content']}")
     return "\n\n".join(sections)
