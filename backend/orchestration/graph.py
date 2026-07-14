@@ -6,6 +6,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from backend.orchestration.state import ConversationState
+from backend.orchestration.nodes.classify import build_classify_node
 from backend.orchestration.nodes.retrieve import build_retrieve_node
 from backend.orchestration.nodes.route import build_route_node
 from backend.orchestration.nodes.generate import build_generate_node
@@ -36,28 +37,97 @@ INTENT_NODES = {
 
 
 def route_after_classify(state: ConversationState) -> str:
+    return state.get("next_node", "retrieve")
+
+
+def route_after_intent(state: ConversationState) -> str:
     intent = state.get("next_node", "general")
     return intent if intent in INTENT_NODES else "general"
 
 
 def build_support_graph(vector_store: VectorStore, llm=None, memory=None) -> StateGraph:
     workflow = StateGraph(ConversationState)
+
+    workflow.add_node("classify", build_classify_node())
     workflow.add_node("retrieve", build_retrieve_node(vector_store))
     workflow.add_node("route", build_route_node())
+    workflow.add_node("respond_greeting", _build_greeting_node(llm=llm))
     for name in INTENT_NODES:
         workflow.add_node(name, INTENT_NODES[name])
     workflow.add_node("generate", build_generate_node(llm=llm, memory=memory))
-    workflow.set_entry_point("retrieve")
-    if llm:
-        workflow.add_edge("retrieve", "generate")
-    else:
-        workflow.add_edge("retrieve", "route")
-        workflow.add_conditional_edges("route", route_after_classify, {name: name for name in INTENT_NODES})
-        for name in INTENT_NODES:
-            workflow.add_edge(name, "generate")
+
+    workflow.set_entry_point("classify")
+
+    # Classify → greeting (no RAG) or support (RAG)
+    workflow.add_conditional_edges(
+        "classify",
+        route_after_classify,
+        {"respond_greeting": "respond_greeting", "retrieve": "retrieve"},
+    )
+
+    # Greeting path: respond → generate → END
+    workflow.add_edge("respond_greeting", "generate")
     workflow.add_edge("generate", END)
+
+    # Support path: retrieve → route → intent answer → generate → END
+    workflow.add_edge("retrieve", "route")
+    workflow.add_conditional_edges(
+        "route",
+        route_after_intent,
+        {name: name for name in INTENT_NODES},
+    )
+    for name in INTENT_NODES:
+        workflow.add_edge(name, "generate")
+
     checkpointer = MemorySaver()
     return workflow.compile(checkpointer=checkpointer)
+
+
+GREETING_RESPONSES: dict[str, str] = {
+    "hi": "Hello! I'm GigaBot, your AI support assistant. How can I help you today? Feel free to ask about GigaCorp's products, policies, billing, or services.",
+    "hello": "Hi there! Welcome to GigaCorp Support. I can answer questions about our products, policies, and services. What would you like to know?",
+    "thanks": "You're welcome! I'm happy to help. Is there anything else you'd like to ask about?",
+    "thank you": "You're welcome! If you need anything else, I'm here to help.",
+    "bye": "Goodbye! Thank you for reaching out to GigaCorp Support. Feel free to come back anytime if you have more questions.",
+    "goodbye": "Goodbye! Have a great day!",
+    "good morning": "Good morning! I'm GigaBot, your AI support assistant. How can I assist you today?",
+    "good afternoon": "Good afternoon! How can I help you today?",
+    "good evening": "Good evening! I'm here to help with any questions about GigaCorp products and services.",
+    "how are you": "I'm doing great, thanks for asking! How can I help you today?",
+    "default": "Hello! I'm GigaBot, your AI support assistant. How can I help you today?",
+}
+
+
+def _build_greeting_node(llm=None):
+    def respond_greeting(state: ConversationState) -> dict:
+        query = state.get("query", "").strip().lower()
+        logger.debug("Greeting response for: '%s'", query)
+
+        if llm:
+            try:
+                prompt = (
+                    f"The user said: '{query}'. "
+                    f"Respond naturally and warmly as a friendly AI customer support assistant named GigaBot. "
+                    f"Keep it concise (1-2 sentences) and invite them to ask about GigaCorp's products and services."
+                )
+                answer = llm.generate(
+                    prompt,
+                    system_prompt="You are GigaBot, a friendly and professional AI customer support assistant for GigaCorp.",
+                )
+                return {"answer": answer, "sources": []}
+            except Exception as e:
+                log_exception(e, "greeting_node.llm")
+                pass
+
+        answer = GREETING_RESPONSES.get("default")
+        for key, response in GREETING_RESPONSES.items():
+            if key in query and key != "default":
+                answer = response
+                break
+
+        return {"answer": answer, "sources": []}
+
+    return respond_greeting
 
 
 LLM_UNAVAILABLE_MSG = (
@@ -152,7 +222,6 @@ class SupportGraph:
         words = text.split(" ")
         for i, word in enumerate(words):
             if i == 0:
-                # First token: yield character-by-character for instant perceived latency
                 for ch in word:
                     tokens.append(ch)
                 tokens.append(" ")

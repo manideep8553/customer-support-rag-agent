@@ -245,6 +245,12 @@ def build_generate_node(llm=None, memory=None):
         has_relevant = bool(docs)
         session_id = state.get("session_id", "")
 
+        # Pass through pre-set answer (e.g., from greeting handler, error fallback)
+        existing_answer = state.get("answer", "")
+        if existing_answer:
+            sources = _format_sources(docs)
+            return {"answer": existing_answer, "sources": sources}
+
         # Fast-path: rule-based answer for known intents (no LLM call needed)
         if not llm or not has_relevant:
             intent = _match_fast_intent(query)
