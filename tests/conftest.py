@@ -2,7 +2,6 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -42,7 +41,7 @@ async def client(app) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def db_session():
-    from backend.auth.database import async_session_factory, init_db, close_db
+    from backend.auth.database import async_session_factory, close_db, init_db
     await init_db()
     async with async_session_factory() as session:
         yield session

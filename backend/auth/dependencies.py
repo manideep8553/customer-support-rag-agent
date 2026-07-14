@@ -2,12 +2,12 @@ import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.database import get_db
-from backend.auth.models import User, UserRole, Permission
+from backend.auth.models import Permission, User
 from backend.auth.utils import decode_token
 
 logger = logging.getLogger("gigacorp.auth.deps")

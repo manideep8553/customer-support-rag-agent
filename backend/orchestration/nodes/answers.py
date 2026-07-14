@@ -415,7 +415,7 @@ def answer_tracking(state: ConversationState) -> dict:
     query = state.get("query", "")
     shipments = customer.get("shipments", [])
     discussed = state.get("discussed_entities", {}) or {}
-    orders = customer.get("recent_orders", [])
+    customer.get("recent_orders", [])
     new_entities = dict(discussed)
 
     matched_tn = _find_tracking_number(query, customer)

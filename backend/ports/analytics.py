@@ -1,6 +1,6 @@
-from typing import Protocol, Any
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Protocol
 
 
 @dataclass

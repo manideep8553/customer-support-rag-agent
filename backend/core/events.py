@@ -1,8 +1,8 @@
-import logging
 import inspect
-from typing import Callable, Any
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 logger = logging.getLogger("gigacorp.events")
 
@@ -30,7 +30,7 @@ class EventBus:
                 result = handler(event)
                 if inspect.isawaitable(result):
                     logger.warning("Event handler %s is async but publish is sync — use publish_async", handler)
-            except Exception as e:
+            except Exception:
                 logger.exception("Event handler %s failed for event %s", handler, event.name)
 
     async def publish_async(self, event: Event) -> None:
@@ -39,7 +39,7 @@ class EventBus:
                 result = handler(event)
                 if inspect.iscoroutine(result):
                     await result
-            except Exception as e:
+            except Exception:
                 logger.exception("Event handler %s failed for async event %s", handler, event.name)
 
     def unsubscribe(self, event_name: str, handler: EventHandler) -> None:

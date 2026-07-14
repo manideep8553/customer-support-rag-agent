@@ -1,6 +1,7 @@
 import pytest
-from backend.enterprise.notifications.service import NotificationService
+
 from backend.enterprise.notifications.models import NotificationChannel, NotificationPriority
+from backend.enterprise.notifications.service import NotificationService
 
 
 @pytest.mark.asyncio

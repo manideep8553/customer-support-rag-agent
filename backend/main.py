@@ -1,12 +1,12 @@
+import logging
 import sys
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -16,24 +16,28 @@ from backend.enterprise.logging_setup import setup_logging
 
 setup_logging()
 
-import logging
-from backend.di.container import container
-from backend.api.routes import build_router
-from backend.auth.router import router as auth_router
-from backend.customer.router import build_customer_router
-from backend.customer.service import CustomerService
-from backend.auth.database import async_session_factory
-from backend.admin.router import build_admin_router
-from backend.core.events import event_bus
-from backend.core.registry import registry
-from backend.errors import (
-    ConfigurationError, GigaCorpError, friendly_error, log_exception,
+from backend.admin.router import build_admin_router  # noqa: E402
+from backend.api.routes import build_router  # noqa: E402
+from backend.auth.database import async_session_factory  # noqa: E402
+from backend.auth.router import router as auth_router  # noqa: E402
+from backend.core.events import event_bus  # noqa: E402
+from backend.core.registry import registry  # noqa: E402
+from backend.customer.router import build_customer_router  # noqa: E402
+from backend.customer.service import CustomerService  # noqa: E402
+from backend.di.container import container  # noqa: E402
+from backend.enterprise.middleware import (  # noqa: E402
+    AuditMiddleware,
+    CorrelationIDMiddleware,
+    MetricsEndpointMiddleware,
 )
-from backend.deploy.config import get_profile, configure_from_profile
-from backend.models.schemas import ErrorDetail
-from backend.enterprise.routes import build_enterprise_router
-from backend.enterprise.websocket.routes import build_ws_router
-from backend.enterprise.middleware import CorrelationIDMiddleware, AuditMiddleware, MetricsEndpointMiddleware
+from backend.enterprise.routes import build_enterprise_router  # noqa: E402
+from backend.enterprise.websocket.routes import build_ws_router  # noqa: E402
+from backend.errors import (  # noqa: E402
+    GigaCorpError,
+    friendly_error,
+    log_exception,
+)
+from backend.models.schemas import ErrorDetail  # noqa: E402
 
 logger = logging.getLogger("gigacorp")
 

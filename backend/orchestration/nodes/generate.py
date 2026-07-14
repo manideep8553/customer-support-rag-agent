@@ -1,20 +1,34 @@
 import logging
 
-from backend.orchestration.state import ConversationState
+from backend.cache import response_cache, token_cache
 from backend.config import settings
 from backend.errors import log_exception
-from backend.cache import response_cache, token_cache
-from backend.security import reinforce_grounding
 from backend.orchestration.nodes.answers import (
-    answer_refund, answer_shipping, answer_contact,
-    answer_warranty, answer_password, answer_upgrade,
-    answer_cancellation, answer_billing, answer_trial,
-    answer_privacy, answer_pricing, answer_licensing,
-    answer_sla, answer_nonprofit, answer_general,
-    answer_order_status, answer_loyalty,
-    answer_invoice, answer_return_policy, answer_exchange,
-    answer_tracking, answer_ticket,
+    answer_billing,
+    answer_cancellation,
+    answer_contact,
+    answer_exchange,
+    answer_general,
+    answer_invoice,
+    answer_licensing,
+    answer_loyalty,
+    answer_nonprofit,
+    answer_order_status,
+    answer_password,
+    answer_pricing,
+    answer_privacy,
+    answer_refund,
+    answer_return_policy,
+    answer_shipping,
+    answer_sla,
+    answer_ticket,
+    answer_tracking,
+    answer_trial,
+    answer_upgrade,
+    answer_warranty,
 )
+from backend.orchestration.state import ConversationState
+from backend.security import reinforce_grounding
 
 logger = logging.getLogger("gigacorp.generate")
 
@@ -298,7 +312,6 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
     "exchange": ["exchange", "swap", "replace", "different product", "different size"],
     "order_status": ["track my order", "where is my order", "order status", "tracking number", "cancel my order", "cancel my pending", "what happened to ord", "order number"],
     "loyalty": ["loyalty", "points", "rewards", "loyalty tier", "my tier", "my points"],
-    "refund": ["refund", "money back"],
     "shipping": ["shipping", "delivery", "ship"],
     "contact": ["contact", "support", "phone", "email support", "customer service", "talk to"],
     "pricing": ["price", "cost", "pricing", "how much"],

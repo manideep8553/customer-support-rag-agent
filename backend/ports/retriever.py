@@ -1,4 +1,5 @@
-from typing import Protocol, Optional
+from typing import Protocol
+
 from backend.ports.vector_store import SearchResult
 
 

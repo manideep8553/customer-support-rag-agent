@@ -1,4 +1,5 @@
 import pytest
+
 from backend.enterprise.email_service.service import EmailService
 
 

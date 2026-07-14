@@ -1,5 +1,5 @@
-from typing import Protocol, Optional
 from datetime import datetime
+from typing import Optional, Protocol
 
 
 class MessageEntry:

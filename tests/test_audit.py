@@ -1,6 +1,7 @@
 import pytest
-from backend.enterprise.audit.service import AuditService
+
 from backend.enterprise.audit.models import AuditAction
+from backend.enterprise.audit.service import AuditService
 
 
 @pytest.mark.asyncio
@@ -28,8 +29,6 @@ async def test_audit_query(db_session):
         actor_id="test-actor",
         outcome="success",
     )
-    from sqlalchemy import select
-    from backend.enterprise.audit.models import AuditLog
     entries, total = await service.query(db=db_session, limit=10)
     assert total >= 1
     assert any(e["resource_type"] == "api" for e in entries)

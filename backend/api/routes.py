@@ -2,61 +2,53 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from pathlib import Path
-from traceback import format_exception
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Request
-from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import ValidationError
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from backend.auth.database import get_db
+from backend.auth.dependencies import get_optional_user
+from backend.auth.models import User
+from backend.cache import embedding_cache, response_cache, token_cache
+from backend.config import settings
+from backend.customer.service import CustomerService
+from backend.errors import (
+    GigaCorpError,
+    friendly_error,
+    log_exception,
+)
+from backend.knowledge_base.store import KnowledgeBaseManager
 from backend.models.schemas import (
     ChatRequest,
     ChatResponse,
-    SessionCreate,
-    SessionInfo as SessionInfoSchema,
-    HistoryRequest,
-    HistoryResponse,
-    MessageEntry,
-    IngestRequest,
-    IngestResponse,
-    RebuildResponse,
     ClearMemoryResponse,
     DiagnosticsRequest,
     DiagnosticsResponse,
     DiagnosticsResult,
-    ErrorDetail,
+    HistoryRequest,
+    HistoryResponse,
+    IngestRequest,
+    IngestResponse,
+    MessageEntry,
+    RebuildResponse,
+    SessionCreate,
     SourceCitation,
 )
-from backend.ports.memory import SessionInfo
-from backend.orchestration.graph import SupportGraph
-from backend.knowledge_base.store import KnowledgeBaseManager
-from backend.config import settings
-from backend.errors import (
-    GigaCorpError,
-    EmbeddingError,
-    VectorStoreError,
-    LLMError,
-    DocumentLoadError,
-    RetrievalError,
-    MemoryError,
-    friendly_error,
-    log_exception,
+from backend.models.schemas import (
+    SessionInfo as SessionInfoSchema,
 )
-from backend.cache import embedding_cache, response_cache, token_cache
+from backend.orchestration.graph import SupportGraph
+from backend.ports.memory import SessionInfo
 from backend.security import (
-    verify_api_key,
     chat_rate_limiter,
-    ingest_rate_limiter,
     get_client_ip,
+    ingest_rate_limiter,
     sanitize_text,
     validate_file_path,
+    verify_api_key,
 )
-from backend.auth.dependencies import get_optional_user
-from backend.auth.models import User
-from backend.auth.database import get_db
-from backend.customer.service import CustomerService
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +170,7 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager, customer_
             try:
                 async for event in orch.query_stream_llm(request.session_id, sanitized_message, user_info=user_info):
                     yield event
-            except Exception as e:
+            except Exception:
                 logger.exception("Stream error for session %s", request.session_id)
                 yield f"data: {json.dumps({'type': 'error', 'detail': 'An error occurred processing your request.'})}\n\n"
 
@@ -508,7 +500,7 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager, customer_
                 "active_sessions": len(orch.list_sessions()),
                 "timestamp": _now().isoformat(),
             }
-        except Exception as e:
+        except Exception:
             logger.exception("Health check error")
             return JSONResponse(
                 status_code=503,

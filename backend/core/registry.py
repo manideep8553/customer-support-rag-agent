@@ -1,5 +1,5 @@
 import logging
-from typing import Any, TypeVar, Generic
+from typing import Any, TypeVar
 
 logger = logging.getLogger("gigacorp.registry")
 

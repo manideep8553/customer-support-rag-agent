@@ -1,19 +1,32 @@
 import logging
-from uuid import UUID
+from datetime import datetime
 from typing import Optional
-from datetime import datetime, date
-from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import select, desc, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.customer.models import (
-    CustomerProfile, ShippingAddress, Order, OrderItem, OrderStatusLog,
-    Invoice, ReturnRequest, ExchangeRequest,
-    Subscription, SavedPaymentMethod, SupportTicket, TicketComment, TicketAttachment,
-    LoyaltyTier, AccountStatus, OrderStatus, PaymentStatus,
-    ReturnStatus, ExchangeStatus, SubscriptionStatus, TicketStatus, TicketPriority,
-    Shipment, ShipmentStatus,
+    AccountStatus,
+    CustomerProfile,
+    ExchangeRequest,
+    Invoice,
+    LoyaltyTier,
+    Order,
+    OrderItem,
+    OrderStatus,
+    OrderStatusLog,
+    PaymentStatus,
+    ReturnRequest,
+    SavedPaymentMethod,
+    ShippingAddress,
+    Subscription,
+    SubscriptionStatus,
+    SupportTicket,
+    TicketAttachment,
+    TicketComment,
+    TicketPriority,
+    TicketStatus,
 )
 from backend.customer.tracker import CourierTracker
 
@@ -728,7 +741,7 @@ class CustomerService:
         result_addr = await db.execute(
             select(ShippingAddress).where(
                 ShippingAddress.customer_id == profile.id,
-                ShippingAddress.is_default == True,
+                ShippingAddress.is_default,
             ).limit(1)
         )
         default_addr = result_addr.scalar_one_or_none()

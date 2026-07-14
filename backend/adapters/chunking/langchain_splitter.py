@@ -1,10 +1,9 @@
 import logging
 from pathlib import Path
-from typing import Optional
 
-from backend.ports.document_loader import DocumentLoader, DocumentChunk
 from backend.config import settings
 from backend.errors import DocumentLoadError, log_exception
+from backend.ports.document_loader import DocumentChunk, DocumentLoader
 
 logger = logging.getLogger("gigacorp.chunking")
 

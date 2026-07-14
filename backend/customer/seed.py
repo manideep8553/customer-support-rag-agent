@@ -1,20 +1,36 @@
 import logging
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.customer.models import (
-    CustomerProfile, ShippingAddress, Order, OrderItem, OrderStatusLog,
-    Invoice, ReturnRequest, Subscription, SavedPaymentMethod,
-    SupportTicket, TicketComment, TicketAttachment,
-    LoyaltyTier, AccountStatus, OrderStatus, PaymentStatus, ReturnStatus,
-    SubscriptionStatus, PaymentMethodType, TicketStatus, TicketPriority,
-    Shipment, ShipmentStatus, ShipmentEvent,
-)
 from backend.auth.models import User
+from backend.customer.models import (
+    AccountStatus,
+    CustomerProfile,
+    Invoice,
+    LoyaltyTier,
+    Order,
+    OrderItem,
+    OrderStatus,
+    OrderStatusLog,
+    PaymentMethodType,
+    PaymentStatus,
+    ReturnRequest,
+    ReturnStatus,
+    SavedPaymentMethod,
+    Shipment,
+    ShipmentEvent,
+    ShipmentStatus,
+    ShippingAddress,
+    Subscription,
+    SubscriptionStatus,
+    SupportTicket,
+    TicketComment,
+    TicketPriority,
+    TicketStatus,
+)
 
 logger = logging.getLogger("gigacorp.customer.seed")
 
@@ -391,7 +407,7 @@ async def seed_customer_data(db: AsyncSession):
             db.add(comment)
 
     # ── Shipments ──────────────────────────────────────────────────────
-    now_ish = datetime.utcnow()
+    datetime.utcnow()
     shipments_data = [
         {
             "order_number": "ORD-2025-001",

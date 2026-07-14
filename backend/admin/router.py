@@ -1,34 +1,45 @@
 import logging
-import json
-from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy import select, func, desc, delete as sa_delete
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.admin.schemas import (
+    AdminDashboardStats,
+    AdminOrderUpdate,
+    AdminRefundAction,
+    AdminRoleUpdate,
+    AdminShipmentCreate,
+    AdminShipmentUpdate,
+    AdminTicketComment,
+    AdminTicketUpdate,
+)
 from backend.auth.database import get_db
 from backend.auth.dependencies import require_role
 from backend.auth.models import User, UserRole
+from backend.config import settings
 from backend.customer.models import (
-    CustomerProfile, Order, OrderStatus, OrderStatusLog,
-    SupportTicket, TicketStatus, TicketComment,
-    ReturnRequest, ReturnStatus,
-    Shipment, ShipmentStatus, ShipmentEvent,
+    CustomerProfile,
+    Order,
+    OrderStatus,
+    OrderStatusLog,
+    ReturnRequest,
+    ReturnStatus,
+    Shipment,
+    ShipmentEvent,
+    ShipmentStatus,
+    SupportTicket,
+    TicketComment,
+    TicketStatus,
 )
 from backend.customer.service import CustomerService
 from backend.knowledge_base.store import KnowledgeBaseManager
 from backend.orchestration.graph import SupportGraph
-from backend.ports.vector_store import VectorStore
 from backend.ports.memory import Memory
-from backend.config import settings
-from backend.admin.schemas import (
-    AdminDashboardStats, AdminOrderUpdate, AdminTicketUpdate,
-    AdminTicketComment, AdminRefundAction, AdminRoleUpdate,
-    AdminShipmentCreate, AdminShipmentUpdate,
-)
+from backend.ports.vector_store import VectorStore
 
 logger = logging.getLogger("gigacorp.admin")
 
@@ -135,7 +146,7 @@ def build_admin_router(
         result = await db.execute(query)
         customers = result.scalars().all()
 
-        oc = await db.execute(select(func.count(Order.id)).where(Order.customer_id.in_([c.id for c in customers])))
+        await db.execute(select(func.count(Order.id)).where(Order.customer_id.in_([c.id for c in customers])))
         order_counts = {}
         if customers:
             from sqlalchemy import func as sf
@@ -300,13 +311,13 @@ def build_admin_router(
             "created_at": o.created_at.isoformat(),
             "status_logs": [
                 {
-                    "from_status": l.from_status,
-                    "to_status": l.to_status,
-                    "changed_by": l.changed_by,
-                    "notes": l.notes,
-                    "created_at": l.created_at.isoformat(),
+                    "from_status": entry.from_status,
+                    "to_status": entry.to_status,
+                    "changed_by": entry.changed_by,
+                    "notes": entry.notes,
+                    "created_at": entry.created_at.isoformat(),
                 }
-                for l in logs
+                for entry in logs
             ],
         }
 

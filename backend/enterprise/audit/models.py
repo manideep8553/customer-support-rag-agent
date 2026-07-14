@@ -2,7 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, DateTime, Enum as SAEnum, JSON, Integer
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 
 from backend.auth.database import Base

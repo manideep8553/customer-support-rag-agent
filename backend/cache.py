@@ -1,7 +1,7 @@
-import time
 import hashlib
 import logging
 import threading
+import time
 from typing import Optional
 
 logger = logging.getLogger("gigacorp.cache")

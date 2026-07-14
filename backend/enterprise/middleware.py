@@ -1,14 +1,13 @@
+import logging
 import time
 import uuid
-import logging
-from typing import Optional
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from backend.enterprise.audit.service import get_audit_service
 from backend.enterprise.audit.models import AuditAction
+from backend.enterprise.audit.service import get_audit_service
 from backend.enterprise.monitoring.metrics import get_metrics_collector
 
 logger = logging.getLogger("gigacorp.middleware")
@@ -92,7 +91,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as exc:
+        except Exception:
             duration_ms = (time.monotonic() - start_time) * 1000
             get_metrics_collector().increment("request.error", 1, {"path": path})
             raise

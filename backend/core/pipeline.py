@@ -1,5 +1,5 @@
 import logging
-from typing import Generic, TypeVar, Protocol, Any
+from typing import Generic, Protocol, TypeVar
 
 logger = logging.getLogger("gigacorp.pipeline")
 
@@ -50,7 +50,7 @@ class Pipeline(Generic[T]):
             logger.debug("Pipeline %s: running stage %s", self.name, name)
             try:
                 data = stage(data, ctx)
-            except Exception as e:
+            except Exception:
                 logger.exception("Pipeline %s stage %s failed", self.name, name)
                 raise
         return data
@@ -65,7 +65,7 @@ class Pipeline(Generic[T]):
                     data = await result
                 else:
                     data = result
-            except Exception as e:
+            except Exception:
                 logger.exception("Pipeline %s stage %s failed", self.name, name)
                 raise
         return data

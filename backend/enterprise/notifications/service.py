@@ -1,12 +1,10 @@
 import logging
-import json
 from typing import Optional
-from datetime import datetime
 
 from backend.config import settings
+from backend.enterprise.email_service.service import get_email_service
 from backend.enterprise.notifications.models import Notification, NotificationChannel, NotificationPriority
 from backend.enterprise.websocket.manager import get_ws_manager
-from backend.enterprise.email_service.service import get_email_service
 
 logger = logging.getLogger("gigacorp.notifications")
 

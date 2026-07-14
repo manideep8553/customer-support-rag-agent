@@ -1,7 +1,7 @@
-import time
 import logging
-from typing import Optional
+import time
 from functools import wraps
+from typing import Optional
 
 from backend.config import settings
 

@@ -1,15 +1,14 @@
-import uuid
 import logging
+import uuid
 from datetime import datetime
-from typing import Optional, Any
-from contextlib import asynccontextmanager
+from typing import Optional
 
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import settings
-from backend.enterprise.audit.models import AuditLog, AuditAction
 from backend.auth.database import async_session_factory
+from backend.config import settings
+from backend.enterprise.audit.models import AuditAction, AuditLog
 
 logger = logging.getLogger("gigacorp.audit")
 

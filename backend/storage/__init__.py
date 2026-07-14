@@ -1,1 +1,1 @@
-from backend.storage.migrations import MigrationManager
+from backend.storage.migrations import MigrationManager as MigrationManager

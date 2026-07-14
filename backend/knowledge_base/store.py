@@ -3,15 +3,14 @@ from pathlib import Path
 from typing import Optional
 
 from backend.config import settings
-from backend.ports.vector_store import VectorStore
-from backend.ports.document_loader import DocumentLoader
 from backend.errors import (
     DocumentLoadError,
-    VectorStoreError,
     EmbeddingError,
+    VectorStoreError,
     log_exception,
-    friendly_error,
 )
+from backend.ports.document_loader import DocumentLoader
+from backend.ports.vector_store import VectorStore
 
 logger = logging.getLogger("gigacorp.knowledge_base")
 

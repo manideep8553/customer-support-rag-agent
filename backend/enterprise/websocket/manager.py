@@ -1,12 +1,9 @@
 import json
 import logging
-import asyncio
-from typing import Optional
 from collections import defaultdict
+from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
-
-from backend.config import settings
 
 logger = logging.getLogger("gigacorp.websocket")
 

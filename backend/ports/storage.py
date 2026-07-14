@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Protocol, Optional, Any
+
 from datetime import datetime
+from typing import Optional, Protocol
 
 
 class DataRecord:

@@ -1,22 +1,20 @@
 import logging
 
+from backend.adapters.chunking.langchain_splitter import LangChainMarkdownLoader
+from backend.adapters.memory.json_file_memory import JsonFileMemory
+from backend.adapters.memory.langgraph_memory import LangGraphMemory
+from backend.adapters.vector_store.chroma_adapter import ChromaDBAdapter
+from backend.adapters.vector_store.faiss_adapter import FAISSAdapter
 from backend.config import settings
 from backend.core.registry import registry
-from backend.ports.vector_store import VectorStore
-from backend.ports.memory import Memory
-from backend.ports.document_loader import DocumentLoader
-from backend.ports.llm import LLM
-from backend.ports.embedding import EmbeddingModel
-
-from backend.adapters.vector_store.faiss_adapter import FAISSAdapter
-from backend.adapters.vector_store.chroma_adapter import ChromaDBAdapter
-from backend.adapters.memory.langgraph_memory import LangGraphMemory
-from backend.adapters.memory.json_file_memory import JsonFileMemory
-from backend.adapters.chunking.langchain_splitter import LangChainMarkdownLoader
-
+from backend.errors import ConfigurationError, log_exception
 from backend.knowledge_base.store import KnowledgeBaseManager
 from backend.orchestration.graph import SupportGraph
-from backend.errors import ConfigurationError, log_exception
+from backend.ports.document_loader import DocumentLoader
+from backend.ports.embedding import EmbeddingModel
+from backend.ports.llm import LLM
+from backend.ports.memory import Memory
+from backend.ports.vector_store import VectorStore
 
 logger = logging.getLogger("gigacorp.di")
 

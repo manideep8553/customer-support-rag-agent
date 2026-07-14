@@ -1,9 +1,9 @@
 import logging
 
+from backend.config import settings
+from backend.errors import log_exception
 from backend.orchestration.state import ConversationState
 from backend.ports.vector_store import VectorStore
-from backend.config import settings
-from backend.errors import RetrievalError, log_exception, friendly_error
 
 logger = logging.getLogger("gigacorp.retrieve")
 

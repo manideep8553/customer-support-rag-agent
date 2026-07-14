@@ -1,15 +1,18 @@
 import logging
 import random
 from datetime import datetime, timedelta
-from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.customer.models import (
-    Shipment, ShipmentEvent, ShipmentStatus,
-    Order, OrderItem, ShippingAddress, CustomerProfile,
+    Order,
+    OrderItem,
+    Shipment,
+    ShipmentEvent,
+    ShipmentStatus,
+    ShippingAddress,
 )
 
 logger = logging.getLogger("gigacorp.customer.tracker")

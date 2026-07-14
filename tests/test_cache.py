@@ -1,5 +1,4 @@
-import pytest
-from backend.cache import LRUCache, EmbeddingCache, ResponseCache, TokenCache
+from backend.cache import EmbeddingCache, LRUCache, ResponseCache, TokenCache
 
 
 def test_lru_cache_basic():

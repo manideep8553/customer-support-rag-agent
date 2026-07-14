@@ -3,9 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from backend.core.pipeline import Pipeline
 from backend.config import settings
-from backend.errors import DocumentLoadError
+from backend.core.pipeline import Pipeline
 
 logger = logging.getLogger("gigacorp.ingestion")
 
@@ -22,8 +21,8 @@ DocumentProcessor = Callable[[Document, dict], Document]
 
 
 def default_processors() -> list[tuple[str, DocumentProcessor]]:
-    from backend.ingestion.processors.text import TextNormalizer, TextChunker, MetadataEnricher
     from backend.ingestion.processors.sanitizer import ContentSanitizer
+    from backend.ingestion.processors.text import MetadataEnricher, TextChunker, TextNormalizer
 
     return [
         ("normalize", TextNormalizer()),

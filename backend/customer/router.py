@@ -1,10 +1,8 @@
 import logging
-import time
 from typing import Optional
 
-from pydantic import BaseModel, Field
-
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.database import get_db

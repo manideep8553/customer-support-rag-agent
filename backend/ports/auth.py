@@ -1,5 +1,5 @@
-from typing import Protocol, Optional
 from dataclasses import dataclass
+from typing import Optional, Protocol
 
 
 @dataclass

@@ -1,8 +1,8 @@
-import time
-import logging
 import functools
+import logging
+import time
 import traceback
-from typing import TypeVar, Callable, Any
+from typing import Any, Callable, TypeVar
 
 logger = logging.getLogger("gigacorp.errors")
 

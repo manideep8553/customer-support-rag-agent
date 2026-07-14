@@ -2,19 +2,18 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.database import get_db
-from backend.auth.dependencies import get_current_user, require_permission, require_role
-from backend.auth.models import User, Permission
+from backend.auth.dependencies import get_current_user, require_permission
+from backend.auth.models import Permission, User
 from backend.config import settings
-from backend.enterprise.audit.service import get_audit_service
 from backend.enterprise.audit.models import AuditAction
-from backend.enterprise.notifications.service import get_notification_service
+from backend.enterprise.audit.service import get_audit_service
 from backend.enterprise.file_store.service import get_file_store
-from backend.enterprise.file_store.models import StoredFile
 from backend.enterprise.monitoring.metrics import get_metrics_collector
+from backend.enterprise.notifications.service import get_notification_service
 
 logger = logging.getLogger("gigacorp.enterprise.routes")
 
@@ -72,7 +71,7 @@ def build_enterprise_router() -> APIRouter:
 
     @router.get("/notifications")
     async def get_my_notifications(current_user: User = Depends(get_current_user)):
-        ws = get_notification_service()
+        get_notification_service()
         return {"status": "notifications_available", "user_id": str(current_user.id)}
 
     @router.post("/notifications/send", dependencies=[Depends(require_permission(Permission.SEND_NOTIFICATIONS))])
@@ -126,7 +125,7 @@ def build_enterprise_router() -> APIRouter:
 
     @router.get("/files/{file_id}")
     async def get_file(file_id: str):
-        store = get_file_store()
+        get_file_store()
         # In a real app, resolve file_id to stored_path from DB
         return {"file_id": file_id, "note": "File retrieval requires stored_path lookup"}
 
@@ -141,7 +140,8 @@ def build_enterprise_router() -> APIRouter:
     async def detailed_health(db: AsyncSession = Depends(get_db)):
         checks = {}
         try:
-            from sqlalchemy import select, func
+            from sqlalchemy import func, select
+
             from backend.auth.models import User
             await db.execute(select(func.count(User.id)))
             checks["database"] = {"status": "healthy"}

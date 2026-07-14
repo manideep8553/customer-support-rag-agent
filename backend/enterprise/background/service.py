@@ -1,6 +1,5 @@
 import logging
-from typing import Optional, Callable, Awaitable
-from datetime import timedelta
+from typing import Optional
 
 from backend.config import settings
 

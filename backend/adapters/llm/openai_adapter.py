@@ -1,10 +1,9 @@
-import json
 import logging
 from typing import AsyncIterator
 
-from backend.ports.llm import LLM
 from backend.config import settings
-from backend.errors import LLMError, log_exception, retry
+from backend.errors import log_exception, retry
+from backend.ports.llm import LLM
 
 logger = logging.getLogger("gigacorp.llm.openai")
 
@@ -19,7 +18,7 @@ class OpenAIAdapter(LLM):
 
     def _init(self):
         try:
-            from openai import OpenAI, AsyncOpenAI
+            from openai import AsyncOpenAI, OpenAI
             self._client = OpenAI(api_key=self.api_key, timeout=30)
             self._async_client = AsyncOpenAI(api_key=self.api_key, timeout=30)
         except ImportError:

@@ -1,11 +1,12 @@
 import json
 import logging
-import httpx
 from typing import AsyncIterator
 
-from backend.ports.llm import LLM
+import httpx
+
 from backend.config import settings
-from backend.errors import LLMError, log_exception, retry
+from backend.errors import log_exception, retry
+from backend.ports.llm import LLM
 
 logger = logging.getLogger("gigacorp.llm.ollama")
 

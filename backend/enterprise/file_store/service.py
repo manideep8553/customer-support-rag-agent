@@ -1,13 +1,13 @@
+import logging
 import os
 import uuid
-import logging
-import aiofiles
-from pathlib import Path
-from typing import Optional, BinaryIO
 from datetime import datetime
+from typing import Optional
+
+import aiofiles
 
 from backend.config import settings
-from backend.enterprise.file_store.models import StoredFile, FileStoreBackend
+from backend.enterprise.file_store.models import FileStoreBackend, StoredFile
 
 logger = logging.getLogger("gigacorp.filestore")
 
@@ -139,7 +139,6 @@ class FileStore:
 
     async def get_url(self, stored_path: str) -> str:
         if self._backend == FileStoreBackend.S3:
-            from botocore.exceptions import ClientError
             try:
                 url = self._s3_client.generate_presigned_url(
                     "get_object",

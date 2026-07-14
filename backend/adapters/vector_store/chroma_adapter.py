@@ -1,11 +1,10 @@
 import logging
-from pathlib import Path
 from typing import Optional
 
-from backend.ports.vector_store import VectorStore, SearchResult
-from backend.config import settings
-from backend.errors import VectorStoreError, EmbeddingError, log_exception
 from backend.cache import embedding_cache
+from backend.config import settings
+from backend.errors import EmbeddingError, VectorStoreError, log_exception
+from backend.ports.vector_store import SearchResult, VectorStore
 
 logger = logging.getLogger("gigacorp.vector_store")
 

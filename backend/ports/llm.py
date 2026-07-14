@@ -1,4 +1,4 @@
-from typing import Protocol, AsyncIterator
+from typing import AsyncIterator, Protocol
 
 
 class LLM(Protocol):

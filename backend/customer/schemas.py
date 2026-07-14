@@ -1,9 +1,9 @@
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
-from uuid import UUID
 from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ShippingAddressSchema(BaseModel):

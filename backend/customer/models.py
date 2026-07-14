@@ -1,13 +1,14 @@
+import enum
 import uuid
-from datetime import datetime, date
+from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Column, DateTime, String, Text, Integer, Numeric, Date, ForeignKey, Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from backend.auth.database import Base
-import enum
 
 
 class AccountStatus(str, enum.Enum):

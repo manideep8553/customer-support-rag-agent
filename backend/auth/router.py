@@ -1,25 +1,34 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Body
-from sqlalchemy import select, or_
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.database import get_db
-from backend.auth.models import User, RefreshToken, UserRole
+from backend.auth.dependencies import get_current_user
+from backend.auth.models import RefreshToken, User, UserRole
 from backend.auth.schemas import (
-    RegisterRequest, LoginRequest, TokenResponse, UserResponse,
-    RefreshRequest, PasswordChangeRequest, PasswordResetRequest,
-    PasswordResetConfirmRequest, ProfileUpdateRequest,
+    LoginRequest,
+    PasswordChangeRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    ProfileUpdateRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
 )
 from backend.auth.utils import (
-    hash_password, verify_password,
-    create_access_token, create_refresh_token,
-    decode_token, hash_token,
-    generate_email_token, generate_password_reset_token,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    generate_email_token,
+    generate_password_reset_token,
+    hash_password,
+    hash_token,
+    verify_password,
 )
-from backend.auth.dependencies import get_current_user, get_optional_user
 from backend.config import settings
 
 logger = logging.getLogger("gigacorp.auth.router")
@@ -125,7 +134,7 @@ async def refresh_token(
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.token_hash == token_hash,
-            RefreshToken.revoked == False,
+            not RefreshToken.revoked,
             RefreshToken.expires_at > datetime.utcnow(),
         )
     )
@@ -175,7 +184,7 @@ async def logout_all(
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == current_user.id,
-            RefreshToken.revoked == False,
+            not RefreshToken.revoked,
         )
     )
     for token in result.scalars().all():
@@ -226,7 +235,7 @@ async def change_password(
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == current_user.id,
-            RefreshToken.revoked == False,
+            not RefreshToken.revoked,
         )
     )
     for token in result.scalars().all():
@@ -284,7 +293,7 @@ async def reset_password(
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == user.id,
-            RefreshToken.revoked == False,
+            not RefreshToken.revoked,
         )
     )
     for token in result.scalars().all():

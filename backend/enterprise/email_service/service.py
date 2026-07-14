@@ -1,7 +1,7 @@
 import logging
-from typing import Optional
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Optional
 
 from backend.config import settings
 
@@ -66,9 +66,10 @@ class EmailService:
         body: str,
         notification_data: Optional[dict] = None,
     ) -> bool:
+        from sqlalchemy import select
+
         from backend.auth.database import async_session_factory
         from backend.auth.models import User
-        from sqlalchemy import select
 
         try:
             async with async_session_factory() as db:
