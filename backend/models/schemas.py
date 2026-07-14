@@ -7,6 +7,7 @@ class SourceCitation(BaseModel):
     content: str = Field(..., description="Retrieved text snippet")
     score: float = Field(..., ge=0.0, le=1.0, description="Relevance score")
     source: str = Field(..., description="Source document identifier")
+    metadata: dict = Field(default_factory=dict, description="Chunk metadata (heading, chunk_index, etc.)")
 
 
 class MessageEntry(BaseModel):

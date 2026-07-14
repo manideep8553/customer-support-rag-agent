@@ -39,8 +39,9 @@ class ChromaDBAdapter(VectorStore):
             ids=ids,
         )
 
-    def search(self, query: str, k: Optional[int] = None) -> list[SearchResult]:
+    def search(self, query: str, k: Optional[int] = None, score_threshold: Optional[float] = None) -> list[SearchResult]:
         k = k or settings.top_k_retrieval
+        threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         query_emb = self._embedding_model.embed([query])
         results = self._collection.query(
             query_embeddings=query_emb,
@@ -48,9 +49,16 @@ class ChromaDBAdapter(VectorStore):
         )
         output = []
         for i in range(len(results["ids"][0])):
+            if "distances" in results:
+                distance = float(results["distances"][0][i])
+                score = 1.0 - (distance / 2.0)
+            else:
+                score = 0.0
+            if score < threshold:
+                continue
             output.append(SearchResult(
                 content=results["documents"][0][i],
-                score=float(results["distances"][0][i]) if "distances" in results else 0.0,
+                score=score,
                 source=results["metadatas"][0][i].get("source", "unknown"),
                 metadata=results["metadatas"][0][i],
             ))

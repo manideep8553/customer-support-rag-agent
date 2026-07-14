@@ -13,3 +13,4 @@ class ConversationState(TypedDict):
     answer: str
     sources: list[dict]
     next_node: str
+    history_str: str

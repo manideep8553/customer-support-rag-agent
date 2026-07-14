@@ -24,29 +24,32 @@ class FAISSAdapter(VectorStore):
         if metadata is None:
             metadata = [{"source": "knowledge_base"} for _ in texts]
         embeddings = self._embedding_model.embed(texts)
+        emb_array = np.array(embeddings, dtype=np.float32)
+        import faiss
+        faiss.normalize_L2(emb_array)
         if self._index is None:
-            import faiss
             self._index = faiss.IndexFlatIP(self._dimension)
-            if not self._index.is_trained:
-                self._index.train(np.array(embeddings, dtype=np.float32))
-        self._index.add(np.array(embeddings, dtype=np.float32))
+        self._index.add(emb_array)
         self._chunks.extend(texts)
         self._metadata.extend(metadata)
         self._save()
 
-    def search(self, query: str, k: Optional[int] = None) -> list[SearchResult]:
+    def search(self, query: str, k: Optional[int] = None, score_threshold: Optional[float] = None) -> list[SearchResult]:
         k = k or settings.top_k_retrieval
+        threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         if self._index is None or self._index.ntotal == 0:
             return []
         query_vec = np.array(self._embedding_model.embed([query]), dtype=np.float32)
+        import faiss
+        faiss.normalize_L2(query_vec)
         scores, indices = self._index.search(query_vec, k)
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx < 0 or score <= 0:
+            if idx < 0 or score < threshold:
                 continue
             results.append(SearchResult(
                 content=self._chunks[idx],
-                score=float(min(score, 1.0)),
+                score=float(score),
                 source=self._metadata[idx].get("source", "unknown"),
                 metadata=self._metadata[idx],
             ))

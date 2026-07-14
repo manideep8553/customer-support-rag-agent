@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
     top_k_retrieval: int = 4
+    similarity_threshold: float = 0.45
 
     vector_store_type: str = "faiss"
 

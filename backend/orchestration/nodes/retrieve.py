@@ -8,7 +8,11 @@ def build_retrieve_node(vector_store: VectorStore):
         query = state.get("query", "")
         if not query:
             return {"retrieved_docs": [], "context": ""}
-        results = vector_store.search(query, k=settings.top_k_retrieval)
+        results = vector_store.search(
+            query,
+            k=settings.top_k_retrieval,
+            score_threshold=settings.similarity_threshold,
+        )
         docs = [
             {"content": r.content, "score": r.score, "source": r.source, "metadata": r.metadata}
             for r in results
@@ -23,5 +27,9 @@ def _format_context(results: list[dict]) -> str:
         return "No relevant documents found."
     sections = []
     for i, r in enumerate(results, 1):
-        sections.append(f"[Source {i}] (Relevance: {r['score']:.2f})\n{r['content']}")
+        heading = r.get("metadata", {}).get("heading", "")
+        header = f"[Source {i}] (Relevance: {r['score']:.2f})"
+        if heading:
+            header += f" — {heading}"
+        sections.append(f"{header}\n{r['content']}")
     return "\n\n".join(sections)
