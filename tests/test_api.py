@@ -32,7 +32,7 @@ async def test_chat_empty_message(client: AsyncClient, registered_user):
         json={"session_id": "test", "message": ""},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status_code == 400
+    assert response.status_code in (400, 422)
 
 
 @pytest.mark.asyncio

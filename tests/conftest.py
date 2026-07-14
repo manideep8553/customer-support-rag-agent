@@ -11,12 +11,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.config import settings
 
-settings.database_url = "sqlite+aiosqlite:///./test.db"
+settings.database_url = "sqlite+aiosqlite://"
 settings.cache_enabled = False
 settings.rate_limiting_enabled = False
 settings.audit_enabled = False
 settings.notification_enabled = False
 settings.email_enabled = False
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def prepare_db():
+    """Create all tables before any test runs."""
+    from backend.auth.database import init_db, close_db
+    await init_db()
+    yield
+    # Optionally drop: await drop_db()
+    await close_db()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -32,7 +42,7 @@ async def app():
     return app
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="session")
 async def client(app) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -41,12 +51,10 @@ async def client(app) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def db_session():
-    from backend.auth.database import async_session_factory, close_db, init_db
-    await init_db()
+    from backend.auth.database import async_session_factory
     async with async_session_factory() as session:
         yield session
         await session.rollback()
-    await close_db()
 
 
 @pytest.fixture
@@ -54,7 +62,7 @@ def auth_headers():
     return {"X-API-Key": ""}
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="session")
 async def registered_user(client: AsyncClient):
     response = await client.post(
         "/api/v1/auth/register",

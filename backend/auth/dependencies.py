@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -41,13 +42,14 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
+    user_id = uuid.UUID(user_id_str)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
@@ -77,10 +79,11 @@ async def get_optional_user(
     if not payload or payload.get("type") != "access":
         return None
 
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
         return None
 
+    user_id = uuid.UUID(user_id_str)
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 

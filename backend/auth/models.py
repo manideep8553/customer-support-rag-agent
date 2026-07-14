@@ -2,9 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, Uuid
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID
 
 from backend.auth.database import Base
 
@@ -104,7 +103,7 @@ def _utcnow():
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     username = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
@@ -159,7 +158,7 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id = Column(Uuid(), nullable=False, index=True)
     token_hash = Column(String(255), unique=True, nullable=False, index=True)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=_utcnow, nullable=False)

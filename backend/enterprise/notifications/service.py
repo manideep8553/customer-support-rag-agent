@@ -73,7 +73,7 @@ class NotificationService:
         return notification
 
     async def notify_ticket_assigned(self, user_id: str, ticket_number: str, assigned_by: str):
-        await self.send(
+        return await self.send(
             user_id=user_id,
             title="Ticket Assigned",
             body=f"Ticket {ticket_number} has been assigned to you by {assigned_by}.",
@@ -83,7 +83,7 @@ class NotificationService:
         )
 
     async def notify_ticket_escalated(self, user_id: str, ticket_number: str, reason: str):
-        await self.send(
+        return await self.send(
             user_id=user_id,
             title="Ticket Escalated",
             body=f"Ticket {ticket_number} has been escalated: {reason}",
@@ -93,7 +93,7 @@ class NotificationService:
         )
 
     async def notify_ticket_resolved(self, user_id: str, ticket_number: str):
-        await self.send(
+        return await self.send(
             user_id=user_id,
             title="Ticket Resolved",
             body=f"Your ticket {ticket_number} has been resolved.",
@@ -103,7 +103,7 @@ class NotificationService:
         )
 
     async def notify_order_update(self, user_id: str, order_number: str, status: str):
-        await self.send(
+        return await self.send(
             user_id=user_id,
             title="Order Update",
             body=f"Order {order_number} status updated to: {status}",
@@ -113,7 +113,7 @@ class NotificationService:
         )
 
     async def notify_shipment_update(self, user_id: str, tracking_number: str, status: str):
-        await self.send(
+        return await self.send(
             user_id=user_id,
             title="Shipment Update",
             body=f"Shipment {tracking_number} is now: {status}",

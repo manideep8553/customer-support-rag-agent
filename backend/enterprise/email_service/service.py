@@ -66,6 +66,7 @@ class EmailService:
         body: str,
         notification_data: Optional[dict] = None,
     ) -> bool:
+        import uuid as _uuid
         from sqlalchemy import select
 
         from backend.auth.database import async_session_factory
@@ -73,7 +74,7 @@ class EmailService:
 
         try:
             async with async_session_factory() as db:
-                result = await db.execute(select(User).where(User.id == user_id))
+                result = await db.execute(select(User).where(User.id == _uuid.UUID(user_id)))
                 user = result.scalar_one_or_none()
                 if not user:
                     logger.warning("User %s not found for email notification", user_id)

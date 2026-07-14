@@ -103,20 +103,16 @@ class AuditService:
         if outcome:
             conditions.append(AuditLog.outcome == outcome)
 
+        from sqlalchemy import func, and_
+
         query = select(AuditLog)
         if conditions:
-            from sqlalchemy import and_
             query = query.where(and_(*conditions))
 
-        count_query = query
-        total = (await db.execute(count_query.with_only_columns(
-            AuditLog.id,  # dummy column just for count
-        ).order_by(None).limit(None).offset(None))).rowcount
-        # Better approach:
-        from sqlalchemy import func
-        total = (await db.execute(
-            select(func.count(AuditLog.id)).where(and_(*conditions)) if conditions else select(func.count(AuditLog.id))
-        )).scalar() or 0
+        count_query = select(func.count(AuditLog.id))
+        if conditions:
+            count_query = count_query.where(and_(*conditions))
+        total = (await db.execute(count_query)).scalar() or 0
 
         query = query.order_by(desc(AuditLog.timestamp)).offset(offset).limit(limit)
         result = await db.execute(query)

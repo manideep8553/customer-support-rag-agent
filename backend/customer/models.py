@@ -3,9 +3,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, Uuid
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from backend.auth.database import Base
@@ -106,8 +105,8 @@ def _utcnow():
 class CustomerProfile(Base):
     __tablename__ = "customer_profiles"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     customer_id = Column(String(50), unique=True, nullable=False, index=True)
     account_status = Column(SAEnum(AccountStatus), default=AccountStatus.ACTIVE, nullable=False)
     loyalty_tier = Column(SAEnum(LoyaltyTier), default=LoyaltyTier.BRONZE, nullable=False)
@@ -132,8 +131,8 @@ class CustomerProfile(Base):
 class ShippingAddress(Base):
     __tablename__ = "shipping_addresses"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     label = Column(String(50), nullable=True)
     full_name = Column(String(200), nullable=False)
     company = Column(String(200), nullable=True)
@@ -153,8 +152,8 @@ class ShippingAddress(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     order_number = Column(String(50), unique=True, nullable=False, index=True)
     status = Column(SAEnum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     payment_status = Column(SAEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
@@ -165,7 +164,7 @@ class Order(Base):
     total = Column(Numeric(12, 2), nullable=False)
     refunded_amount = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     currency = Column(String(3), default="USD", nullable=False)
-    shipping_address_id = Column(UUID(as_uuid=True), ForeignKey("shipping_addresses.id"), nullable=True)
+    shipping_address_id = Column(Uuid(), ForeignKey("shipping_addresses.id"), nullable=True)
     tracking_number = Column(String(100), nullable=True)
     carrier = Column(String(100), nullable=True)
     estimated_delivery = Column(Date, nullable=True)
@@ -191,8 +190,8 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     product_name = Column(String(200), nullable=False)
     product_category = Column(String(100), nullable=True)
     quantity = Column(Integer, default=1, nullable=False)
@@ -208,7 +207,7 @@ class OrderStatusLog(Base):
     __tablename__ = "order_status_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     from_status = Column(String(30), nullable=True)
     to_status = Column(String(30), nullable=False)
     changed_by = Column(String(100), nullable=True)
@@ -221,8 +220,8 @@ class OrderStatusLog(Base):
 class Invoice(Base):
     __tablename__ = "invoices"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
     subtotal = Column(Numeric(12, 2), nullable=False)
     tax = Column(Numeric(12, 2), nullable=False)
@@ -245,12 +244,12 @@ class Invoice(Base):
 class ReturnRequest(Base):
     __tablename__ = "return_requests"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     rma_number = Column(String(30), unique=True, nullable=False, index=True)
     status = Column(SAEnum(ReturnStatus), default=ReturnStatus.REQUESTED, nullable=False)
     reason = Column(String(500), nullable=False)
-    items_json = Column(JSONB, nullable=True)
+    items_json = Column(JSON, nullable=True)
     condition = Column(String(200), nullable=True)
     refund_amount = Column(Numeric(12, 2), nullable=True)
     return_label_url = Column(String(500), nullable=True)
@@ -269,8 +268,8 @@ class ReturnRequest(Base):
 class ExchangeRequest(Base):
     __tablename__ = "exchange_requests"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(SAEnum(ExchangeStatus), default=ExchangeStatus.REQUESTED, nullable=False)
     reason = Column(String(500), nullable=False)
     original_product = Column(String(200), nullable=False)
@@ -290,8 +289,8 @@ class ExchangeRequest(Base):
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     plan_name = Column(String(200), nullable=False)
     plan_tier = Column(String(50), nullable=True)
     status = Column(SAEnum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE, nullable=False)
@@ -311,8 +310,8 @@ class Subscription(Base):
 class SavedPaymentMethod(Base):
     __tablename__ = "saved_payment_methods"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     method_type = Column(SAEnum(PaymentMethodType), nullable=False)
     label = Column(String(100), nullable=True)
     last_four = Column(String(4), nullable=True)
@@ -321,7 +320,7 @@ class SavedPaymentMethod(Base):
     expiry_year = Column(Integer, nullable=True)
     email = Column(String(255), nullable=True)
     is_default = Column(Boolean, default=False, nullable=False)
-    billing_address_id = Column(UUID(as_uuid=True), ForeignKey("shipping_addresses.id"), nullable=True)
+    billing_address_id = Column(Uuid(), ForeignKey("shipping_addresses.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow, nullable=False)
 
     customer = relationship("CustomerProfile", back_populates="payment_methods")
@@ -331,8 +330,8 @@ class SavedPaymentMethod(Base):
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     ticket_number = Column(String(30), unique=True, nullable=False, index=True)
     subject = Column(String(300), nullable=False)
     status = Column(SAEnum(TicketStatus), default=TicketStatus.OPEN, nullable=False)
@@ -349,7 +348,7 @@ class SupportTicket(Base):
     escalated_at = Column(DateTime, nullable=True)
     escalation_reason = Column(Text, nullable=True)
     related_order_number = Column(String(50), nullable=True)
-    tags = Column(JSONB, nullable=True)
+    tags = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -362,8 +361,8 @@ class SupportTicket(Base):
 class TicketComment(Base):
     __tablename__ = "ticket_comments"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ticket_id = Column(UUID(as_uuid=True), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(Uuid(), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
     author = Column(String(200), nullable=False)
     body = Column(Text, nullable=False)
     is_internal = Column(Boolean, default=False, nullable=False)
@@ -375,8 +374,8 @@ class TicketComment(Base):
 class TicketAttachment(Base):
     __tablename__ = "ticket_attachments"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ticket_id = Column(UUID(as_uuid=True), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(Uuid(), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=True)
     content_type = Column(String(100), nullable=True)
@@ -399,9 +398,9 @@ class ShipmentStatus(str, enum.Enum):
 class Shipment(Base):
     __tablename__ = "shipments"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    order_id = Column(Uuid(), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True)
+    customer_id = Column(Uuid(), ForeignKey("customer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     tracking_number = Column(String(100), unique=True, nullable=False, index=True)
     courier = Column(String(100), nullable=False)
     courier_code = Column(String(20), nullable=True)
@@ -414,7 +413,7 @@ class Shipment(Base):
     last_update = Column(DateTime, default=_utcnow, nullable=False)
     weight_lb = Column(Numeric(8, 2), nullable=True)
     package_count = Column(Integer, default=1, nullable=False)
-    destination_address_id = Column(UUID(as_uuid=True), ForeignKey("shipping_addresses.id"), nullable=True)
+    destination_address_id = Column(Uuid(), ForeignKey("shipping_addresses.id"), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
@@ -429,8 +428,8 @@ class Shipment(Base):
 class ShipmentEvent(Base):
     __tablename__ = "shipment_events"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    shipment_id = Column(UUID(as_uuid=True), ForeignKey("shipments.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
+    shipment_id = Column(Uuid(), ForeignKey("shipments.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(30), nullable=False)
     location = Column(String(255), nullable=True)
     description = Column(String(500), nullable=False)
@@ -443,12 +442,12 @@ class ShipmentEvent(Base):
 class SubscriptionPlan(Base):
     __tablename__ = "subscription_plans"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(), primary_key=True, default=uuid.uuid4)
     name = Column(String(200), unique=True, nullable=False)
     tier = Column(String(50), nullable=False)
     description = Column(Text, nullable=True)
     monthly_price = Column(Numeric(10, 2), nullable=False)
     annual_price = Column(Numeric(10, 2), nullable=False)
-    features = Column(JSONB, nullable=True)
+    features = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=_utcnow, nullable=False)

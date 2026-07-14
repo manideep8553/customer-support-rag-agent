@@ -8,12 +8,11 @@ from backend.config import settings
 
 logger = logging.getLogger("gigacorp.auth.db")
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.database_echo,
-    pool_size=settings.database_pool_size,
-    max_overflow=settings.database_max_overflow,
-)
+engine_kwargs = dict(echo=settings.database_echo)
+if not settings.database_url.startswith("sqlite"):
+    engine_kwargs["pool_size"] = settings.database_pool_size
+    engine_kwargs["max_overflow"] = settings.database_max_overflow
+engine = create_async_engine(settings.database_url, **engine_kwargs)
 
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
