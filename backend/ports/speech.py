@@ -1,0 +1,13 @@
+from typing import Protocol, AsyncIterator
+
+
+class SpeechToText(Protocol):
+    async def transcribe(self, audio_data: bytes, language: str = "en") -> str: ...
+
+    async def transcribe_stream(self, audio_stream: AsyncIterator[bytes]) -> AsyncIterator[str]: ...
+
+
+class TextToSpeech(Protocol):
+    async def synthesize(self, text: str, voice: str = "default") -> bytes: ...
+
+    async def synthesize_stream(self, text: str, voice: str = "default") -> AsyncIterator[bytes]: ...
