@@ -33,7 +33,7 @@ def _user_to_response(user: User) -> UserResponse:
         email=user.email,
         username=user.username,
         display_name=user.display_name,
-        role=user.role.value if user.role else "user",
+        role=user.role.value if user.role else "customer",
         is_verified=user.is_verified,
         avatar_url=user.avatar_url,
         company=user.company,
@@ -81,7 +81,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
         hashed_password=hash_password(body.password),
         display_name=body.display_name or body.username,
         company=body.company,
-        role=UserRole.USER,
+        role=UserRole.CUSTOMER,
         email_verification_token=generate_email_token(),
     )
     db.add(user)

@@ -1,9 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
 venv/
-data/vector_store/
+.venv/
+*.so
+
+# Environment
+.env
+
+# Data
+data/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# React
 react-frontend/node_modules/
 react-frontend/dist/
-tmp/
-__pycache__/
-*.pyc
-.env
-*.log
+
+# Testing
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Docker
+.docker/

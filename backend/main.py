@@ -1,4 +1,3 @@
-import logging
 import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -13,12 +12,18 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.config import settings
+from backend.enterprise.logging_setup import setup_logging
+
+setup_logging()
+
+import logging
 from backend.di.container import container
 from backend.api.routes import build_router
 from backend.auth.router import router as auth_router
 from backend.customer.router import build_customer_router
 from backend.customer.service import CustomerService
 from backend.auth.database import async_session_factory
+from backend.admin.router import build_admin_router
 from backend.core.events import event_bus
 from backend.core.registry import registry
 from backend.errors import (
@@ -26,6 +31,9 @@ from backend.errors import (
 )
 from backend.deploy.config import get_profile, configure_from_profile
 from backend.models.schemas import ErrorDetail
+from backend.enterprise.routes import build_enterprise_router
+from backend.enterprise.websocket.routes import build_ws_router
+from backend.enterprise.middleware import CorrelationIDMiddleware, AuditMiddleware, MetricsEndpointMiddleware
 
 logger = logging.getLogger("gigacorp")
 
@@ -44,10 +52,45 @@ def _setup_event_handlers():
     logger.info("Event handlers registered")
 
 
+async def _init_enterprise_services():
+    try:
+        if settings.cache_enabled:
+            from backend.enterprise.cache_provider.redis_cache import get_cache
+            cache = await get_cache()
+            await cache.initialize()
+            logger.info("Redis cache initialized")
+    except Exception as e:
+        logger.warning("Redis cache initialization failed: %s", e)
+
+    try:
+        from backend.enterprise.background.service import get_background_service
+        bg = get_background_service()
+        await bg.initialize()
+    except Exception as e:
+        logger.warning("Background job service initialization failed: %s", e)
+
+
+async def _close_enterprise_services():
+    try:
+        if settings.cache_enabled:
+            from backend.enterprise.cache_provider.redis_cache import get_cache
+            cache = await get_cache()
+            await cache.close()
+    except Exception:
+        pass
+
+    try:
+        from backend.enterprise.background.service import get_background_service
+        bg = get_background_service()
+        await bg.close()
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=" * 60)
-    logger.info(f"  {settings.app_name} v{settings.app_version}")
+    logger.info(f"  {settings.app_name} v{settings.app_version} [{settings.environment}]")
     logger.info("=" * 60)
 
     _setup_event_handlers()
@@ -96,22 +139,26 @@ async def lifespan(app: FastAPI):
         log_exception(e, "lifespan.startup")
         logger.warning("Knowledge base init failed, continuing: %s", e)
 
+    await _init_enterprise_services()
+
     logger.info("Registered components: %s", registry.list())
 
     yield
+
+    await _close_enterprise_services()
 
     try:
         from backend.auth.database import close_db
         await close_db()
     except Exception as e:
         logger.warning("Database shutdown error: %s", e)
-    logger.info("Shutting down GigaCorp RAG Agent...")
+    logger.info("Shutting down GigaCorp...")
 
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Modular Customer Support RAG Agent with LangGraph Orchestration — extensible architecture",
+    description="Enterprise Customer Support RAG Platform with AI Orchestration",
     lifespan=lifespan,
 )
 
@@ -159,12 +206,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(CorrelationIDMiddleware)
+app.add_middleware(AuditMiddleware)
+app.add_middleware(MetricsEndpointMiddleware)
+
+
 customer_service = CustomerService(lambda: async_session_factory())
 router = build_router(container.orchestrator, container.kb_manager, customer_service=customer_service)
 customer_router = build_customer_router(customer_service)
+admin_router = build_admin_router(
+    customer_service=customer_service,
+    kb_manager=container.kb_manager,
+    orchestrator=container.orchestrator,
+    memory=container.memory,
+    vector_store=container.vector_store,
+)
+enterprise_router = build_enterprise_router()
+ws_router = build_ws_router()
+
 app.include_router(auth_router)
 app.include_router(router, prefix="/api/v1")
 app.include_router(customer_router)
+app.include_router(admin_router)
+app.include_router(enterprise_router)
+app.include_router(ws_router)
+
+# Health endpoint at root
+@app.get("/health")
+async def root_health():
+    from datetime import datetime, timezone
+    return {
+        "status": "healthy",
+        "app": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 frontend_paths = [
     Path(__file__).resolve().parent.parent / "react-frontend" / "dist",

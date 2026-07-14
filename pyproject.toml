@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "gigacorp-support"
+version = "2.0.0"
+description = "Enterprise Customer Support RAG Platform"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E8", "F", "W", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "asyncio: mark test as async",
+]
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "*/venv/*",
+    "*/tests/*",
+    "*/migrations/*",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.arq]
+redis_settings = "redis://localhost:6379/3"
+functions = [
+    "backend.enterprise.background.tasks.send_email_task",
+    "backend.enterprise.background.tasks.process_ingestion_task",
+    "backend.enterprise.background.tasks.cleanup_expired_sessions_task",
+]

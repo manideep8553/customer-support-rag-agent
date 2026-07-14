@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.database import get_db
-from backend.auth.models import User
+from backend.auth.models import User, UserRole, Permission
 from backend.auth.utils import decode_token
 
 logger = logging.getLogger("gigacorp.auth.deps")
@@ -91,6 +91,28 @@ def require_role(role: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{role}' required",
+            )
+        return current_user
+    return role_checker
+
+
+def require_permission(permission: Permission):
+    async def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        if not current_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission '{permission.value}' required",
+            )
+        return current_user
+    return permission_checker
+
+
+def require_any_role(*roles: str):
+    async def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role.value not in roles and current_user.role.value != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"One of roles {roles} required",
             )
         return current_user
     return role_checker

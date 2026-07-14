@@ -66,7 +66,7 @@ let accessToken: string | null = localStorage.getItem('gc_access_token')
 let refreshToken: string | null = localStorage.getItem('gc_refresh_token')
 let refreshPromise: Promise<void> | null = null
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
 })
