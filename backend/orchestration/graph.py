@@ -117,6 +117,24 @@ class SupportGraph:
             tokens[-1] = tokens[-1].rstrip(" ")
         return tokens or [""]
 
+    def retrieval_diagnostics(self, query: str, k: int = 4, threshold: float = 0.0) -> dict:
+        results = self.vector_store.search(query, k=k, score_threshold=threshold)
+        docs = [
+            {
+                "content": r.content,
+                "score": r.score,
+                "source": r.source,
+                "metadata": r.metadata,
+            }
+            for r in results
+        ]
+        return {
+            "query": query,
+            "total_results": len(docs),
+            "threshold": threshold,
+            "results": docs,
+        }
+
     def list_sessions(self) -> list[str]:
         return self.memory.list_sessions()
 

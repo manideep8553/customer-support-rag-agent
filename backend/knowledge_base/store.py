@@ -61,5 +61,43 @@ class KnowledgeBaseManager:
             "vector_store_path": str(settings.vector_store_path),
         }
 
+    def ingest_all(self) -> dict:
+        kb_path = settings.knowledge_base_path
+        md_files = sorted(kb_path.glob("*.md"))
+        if not md_files:
+            raise FileNotFoundError(f"No markdown files found in {kb_path}")
+
+        total_chunks = 0
+        files_processed = 0
+        for md_file in md_files:
+            path = str(md_file)
+            chunks = self.loader.load(path)
+            if not chunks:
+                continue
+            texts = [c.content for c in chunks]
+            metadata = [c.metadata for c in chunks]
+            source_name = md_file.name
+            for m in metadata:
+                m["source"] = source_name
+            self.vector_store.add(texts, metadata)
+            total_chunks += len(chunks)
+            files_processed += 1
+
+        return {
+            "status": "success",
+            "total_chunks": total_chunks,
+            "files_processed": files_processed,
+            "message": f"Ingested {total_chunks} chunks from {files_processed} file(s)",
+        }
+
+    def rebuild(self) -> dict:
+        old_count = 0
+        if hasattr(self.vector_store, "_chunks") and self.vector_store._chunks:
+            old_count = len(self.vector_store._chunks)
+        self.vector_store.delete()
+        result = self.ingest_all()
+        result["old_chunks_cleared"] = old_count
+        return result
+
     def clear(self):
         self.vector_store.delete()
