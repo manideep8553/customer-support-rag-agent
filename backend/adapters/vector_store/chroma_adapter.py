@@ -1,8 +1,12 @@
+import logging
 from pathlib import Path
 from typing import Optional
 
 from backend.ports.vector_store import VectorStore, SearchResult
 from backend.config import settings
+from backend.errors import VectorStoreError, EmbeddingError, log_exception
+
+logger = logging.getLogger("gigacorp.vector_store")
 
 
 class ChromaDBAdapter(VectorStore):
@@ -11,6 +15,7 @@ class ChromaDBAdapter(VectorStore):
         self._persist_dir = settings.vector_store_path
         self._collection = None
         self._client = None
+        self._ready = False
         self._init_client()
 
     def _init_client(self) -> None:
@@ -21,32 +26,61 @@ class ChromaDBAdapter(VectorStore):
                 name="gigacorp_kb",
                 metadata={"hnsw:space": "cosine"},
             )
+            self._ready = True
         except ImportError:
-            raise ImportError("chromadb is required. Install: pip install chromadb")
+            logger.warning("chromadb not installed. Install with: pip install chromadb")
+            self._ready = False
+        except Exception as e:
+            logger.error("Failed to initialize ChromaDB: %s", e)
+            log_exception(e, "ChromaDBAdapter._init_client")
+            self._ready = False
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        return self._embedding_model.embed(texts)
+        try:
+            return self._embedding_model.embed(texts)
+        except EmbeddingError:
+            raise
+        except Exception as e:
+            log_exception(e, "ChromaDBAdapter.embed")
+            raise EmbeddingError("Failed to generate embeddings for ChromaDB", cause=e)
 
     def add(self, texts: list[str], metadata: Optional[list[dict]] = None) -> None:
+        if not self._ready:
+            raise VectorStoreError("ChromaDB is not initialized")
         if metadata is None:
             metadata = [{"source": "knowledge_base"} for _ in texts]
-        embeddings = self._embedding_model.embed(texts)
-        ids = [f"chunk_{i}" for i in range(len(texts))]
-        self._collection.add(
-            documents=texts,
-            embeddings=embeddings,
-            metadatas=metadata,
-            ids=ids,
-        )
+        try:
+            embeddings = self._embedding_model.embed(texts)
+            ids = [f"chunk_{i}" for i in range(len(texts))]
+            self._collection.add(
+                documents=texts,
+                embeddings=embeddings,
+                metadatas=metadata,
+                ids=ids,
+            )
+        except EmbeddingError:
+            raise
+        except Exception as e:
+            log_exception(e, "ChromaDBAdapter.add")
+            raise VectorStoreError("Failed to add documents to ChromaDB", cause=e)
 
     def search(self, query: str, k: Optional[int] = None, score_threshold: Optional[float] = None) -> list[SearchResult]:
+        if not self._ready or self._collection is None:
+            return []
         k = k or settings.top_k_retrieval
         threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
-        query_emb = self._embedding_model.embed([query])
-        results = self._collection.query(
-            query_embeddings=query_emb,
-            n_results=k,
-        )
+        try:
+            query_emb = self._embedding_model.embed([query])
+            results = self._collection.query(
+                query_embeddings=query_emb,
+                n_results=k,
+            )
+        except EmbeddingError:
+            raise
+        except Exception as e:
+            log_exception(e, "ChromaDBAdapter.search")
+            raise VectorStoreError("Failed to search ChromaDB", cause=e)
+
         output = []
         for i in range(len(results["ids"][0])):
             if "distances" in results:
@@ -65,9 +99,23 @@ class ChromaDBAdapter(VectorStore):
         return output
 
     def delete(self) -> None:
-        self._client.delete_collection("gigacorp_kb")
-        self._collection = self._client.get_or_create_collection(name="gigacorp_kb")
+        if not self._ready or self._client is None:
+            return
+        try:
+            self._client.delete_collection("gigacorp_kb")
+            self._collection = self._client.get_or_create_collection(name="gigacorp_kb")
+        except Exception as e:
+            logger.warning("Error clearing ChromaDB: %s", e)
 
     @property
     def is_initialized(self) -> bool:
-        return self._collection is not None and self._collection.count() > 0
+        return self._ready and self._collection is not None and self._collection.count() > 0
+
+    @property
+    def chunk_count(self) -> int:
+        if not self._ready or self._collection is None:
+            return 0
+        try:
+            return self._collection.count()
+        except Exception:
+            return 0

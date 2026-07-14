@@ -32,6 +32,17 @@ from backend.ports.memory import SessionInfo
 from backend.orchestration.graph import SupportGraph
 from backend.knowledge_base.store import KnowledgeBaseManager
 from backend.config import settings
+from backend.errors import (
+    GigaCorpError,
+    EmbeddingError,
+    VectorStoreError,
+    LLMError,
+    DocumentLoadError,
+    RetrievalError,
+    MemoryError,
+    friendly_error,
+    log_exception,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +93,24 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             ).model_dump(),
         )
 
+    @router.exception_handler(GigaCorpError)
+    async def gigacorp_error_handler(request: Request, exc: GigaCorpError):
+        log_exception(exc, "GigaCorpError")
+        return JSONResponse(
+            status_code=500,
+            content=ErrorDetail(
+                detail=friendly_error(exc),
+                code=exc.code,
+            ).model_dump(),
+        )
+
     @router.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled exception")
         return JSONResponse(
             status_code=500,
             content=ErrorDetail(
-                detail="Internal server error",
+                detail="An unexpected error occurred. Please try again.",
                 code="INTERNAL_ERROR",
             ).model_dump(),
         )
@@ -111,9 +133,12 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         start = time.monotonic()
         try:
             result = orch.query(request.session_id, request.message)
+        except GigaCorpError as e:
+            log_exception(e, "chat.gigacorp_error")
+            raise HTTPException(status_code=500, detail=friendly_error(e))
         except Exception as e:
-            logger.exception("Chat error for session %s", request.session_id)
-            raise HTTPException(status_code=500, detail=str(e))
+            log_exception(e, "chat.unexpected_error")
+            raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again.")
 
         elapsed = (time.monotonic() - start) * 1000
         sources_raw = result.get("sources", [])

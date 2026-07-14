@@ -191,9 +191,12 @@ def answer_nonprofit(state: ConversationState) -> dict:
 
 def answer_general(state: ConversationState) -> dict:
     docs = state.get("retrieved_docs", [])
-    top = docs[0]["content"] if docs else "GigaCorp policy information."
+    if docs:
+        top = docs[0].get("content", "GigaCorp policy information.")
+    else:
+        top = "I don't have enough information to answer that question. Please contact our support team at support@gigacorp.com for further assistance."
     return {"answer": (
-        f"Based on the information I found in GigaCorp's knowledge base:\n\n{top}\n\n"
+        f"{top}\n\n"
         f"Is there anything specific about this topic you'd like to know more about? "
         f"I can help with questions about refunds, shipping, warranties, billing, "
         f"technical support, and other GigaCorp services."

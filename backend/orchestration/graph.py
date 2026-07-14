@@ -11,6 +11,7 @@ from backend.orchestration.nodes.route import build_route_node
 from backend.orchestration.nodes.generate import build_generate_node
 from backend.orchestration.nodes import answers as answer_nodes
 from backend.ports.vector_store import VectorStore
+from backend.errors import log_exception
 
 logger = logging.getLogger("gigacorp.graph")
 
@@ -59,6 +60,12 @@ def build_support_graph(vector_store: VectorStore, llm=None, memory=None) -> Sta
     return workflow.compile(checkpointer=checkpointer)
 
 
+LLM_UNAVAILABLE_MSG = (
+    "I'm sorry, I'm unable to generate a response right now. "
+    "Please try again in a moment."
+)
+
+
 class SupportGraph:
     def __init__(self, vector_store: VectorStore, memory_backend, llm=None):
         self.vector_store = vector_store
@@ -67,7 +74,11 @@ class SupportGraph:
         self.graph = build_support_graph(vector_store, llm=llm, memory=memory_backend)
 
     def query(self, session_id: str, message: str) -> dict:
-        self.memory.add_turn(session_id, "user", message)
+        try:
+            self.memory.add_turn(session_id, "user", message)
+        except Exception as e:
+            logger.warning("Failed to store user message for session %s: %s", session_id, e)
+
         initial_state: ConversationState = {
             "messages": [],
             "session_id": session_id,
@@ -81,14 +92,32 @@ class SupportGraph:
             "history_str": "",
         }
         config = {"configurable": {"thread_id": session_id}}
-        result = self.graph.invoke(initial_state, config=config)
+
+        try:
+            result = self.graph.invoke(initial_state, config=config)
+        except Exception as e:
+            log_exception(e, "SupportGraph.query.graph_invoke")
+            logger.error("Graph execution failed for session %s: %s", session_id, e)
+            result = {"answer": LLM_UNAVAILABLE_MSG, "sources": []}
+
         answer = result.get("answer", "")
         sources = result.get("sources", [])
-        self.memory.add_turn(session_id, "assistant", answer)
+
+        try:
+            self.memory.add_turn(session_id, "assistant", answer)
+        except Exception as e:
+            logger.warning("Failed to store assistant message for session %s: %s", session_id, e)
+
         return {"answer": answer, "sources": sources}
 
     async def query_stream(self, session_id: str, message: str) -> AsyncIterator[str]:
-        result = self.query(session_id, message)
+        try:
+            result = self.query(session_id, message)
+        except Exception as e:
+            log_exception(e, "SupportGraph.query_stream")
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Failed to process query'})}\n\n"
+            return
+
         answer = result.get("answer", "")
         sources = result.get("sources", [])
         yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
@@ -101,7 +130,14 @@ class SupportGraph:
             async for chunk in self.query_stream(session_id, message):
                 yield chunk
             return
-        result = self.query(session_id, message)
+
+        try:
+            result = self.query(session_id, message)
+        except Exception as e:
+            log_exception(e, "SupportGraph.query_stream_llm")
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Failed to process query'})}\n\n"
+            return
+
         sources = result.get("sources", [])
         yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
         answer = result.get("answer", "")
@@ -118,7 +154,12 @@ class SupportGraph:
         return tokens or [""]
 
     def retrieval_diagnostics(self, query: str, k: int = 4, threshold: float = 0.0) -> dict:
-        results = self.vector_store.search(query, k=k, score_threshold=threshold)
+        try:
+            results = self.vector_store.search(query, k=k, score_threshold=threshold)
+        except Exception as e:
+            log_exception(e, "SupportGraph.retrieval_diagnostics")
+            return {"query": query, "total_results": 0, "threshold": threshold, "results": []}
+
         docs = [
             {
                 "content": r.content,
@@ -136,7 +177,15 @@ class SupportGraph:
         }
 
     def list_sessions(self) -> list[str]:
-        return self.memory.list_sessions()
+        try:
+            return self.memory.list_sessions()
+        except Exception as e:
+            logger.error("Failed to list sessions: %s", e)
+            return []
 
     def get_history(self, session_id: str) -> list[dict]:
-        return self.memory.get_messages(session_id)
+        try:
+            return self.memory.get_messages(session_id)
+        except Exception as e:
+            logger.error("Failed to get history for session %s: %s", session_id, e)
+            return []

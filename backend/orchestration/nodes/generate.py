@@ -1,9 +1,14 @@
+import logging
+
 from backend.orchestration.state import ConversationState
 from backend.config import settings
+from backend.errors import log_exception
+
+logger = logging.getLogger("gigacorp.generate")
 
 RAG_SYSTEM_PROMPT = """You are GigaBot, an AI customer support representative for GigaCorp. You are helpful, professional, and concise.
 
-Company: GigaCorp — a global technology company offering cloud computing, AI analytics, and enterprise software.
+Company: GigaCorp \u2014 a global technology company offering cloud computing, AI analytics, and enterprise software.
 
 --- CORE BEHAVIOR ---
 1. Be polite, professional, and empathetic. Use warm but professional language.
@@ -20,7 +25,7 @@ Company: GigaCorp — a global technology company offering cloud computing, AI a
 8. If you are unsure whether a piece of information is supported by the retrieved knowledge, err on the side of not including it.
 
 --- CITATIONS ---
-9. After every factual statement derived from the knowledge base, cite the source using the exact format shown in the retrieved knowledge, which includes the document name and section: [Source N: DocumentName → SectionHeading]. Always replicate the full citation.
+9. After every factual statement derived from the knowledge base, cite the source using the exact format shown in the retrieved knowledge, which includes the document name and section: [Source N: DocumentName \u2192 SectionHeading]. Always replicate the full citation.
 10. Place citations immediately after the relevant sentence, before the period.
 11. If multiple document chunks contribute to a single answer, list all relevant citations in the order they are used, each in its own [Source N: ...] bracket.
 
@@ -52,26 +57,36 @@ Summary:"""
 
 
 def _build_history(memory, session_id: str, llm, query: str) -> str:
-    messages = memory.get_messages(session_id)
-    if not messages and not memory.get_summary(session_id):
+    try:
+        messages = memory.get_messages(session_id)
+    except Exception as e:
+        logger.warning("Failed to get messages for session %s: %s", session_id, e)
+        messages = []
+
+    try:
+        summary = memory.get_summary(session_id)
+    except Exception as e:
+        logger.warning("Failed to get summary for session %s: %s", session_id, e)
+        summary = ""
+
+    if not messages and not summary:
         return ""
 
-    summary = memory.get_summary(session_id)
     token_budget = settings.max_history_tokens
 
     def format_line(msg: dict) -> str:
         role = "Customer" if msg["role"] == "user" else "Assistant"
         return f"{role}: {msg['content']}"
 
-    def format_lines(lines: list[str]) -> str:
-        return "\n".join(lines)
-
     recent_lines = [format_line(m) for m in messages]
     summary_line = f"[Previous conversation summary: {summary}]" if summary else ""
 
     def estimate_tokens(text: str) -> int:
         if hasattr(llm, "count_tokens"):
-            return llm.count_tokens(text)
+            try:
+                return llm.count_tokens(text)
+            except Exception:
+                return len(text.split())
         return len(text.split())
 
     answer_note = "\n[Note: The current turn's assistant answer will be shown here after generation.]"
@@ -126,11 +141,14 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
             if new_summary:
                 if summary:
                     new_summary = f"{summary} | {new_summary}"
-                memory.summarize(session_id, new_summary)
+                try:
+                    memory.summarize(session_id, new_summary)
+                except Exception as e:
+                    logger.warning("Failed to persist summary for session %s: %s", session_id, e)
                 summary = new_summary
                 summary_line = f"[Previous conversation summary: {summary}]"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Summarization failed for session %s: %s", session_id, e)
         kept = recent_lines[-min(n_keep, len(recent_lines)):]
         attempt_total = total_tokens(summary_line, kept, query)
         while len(kept) > 2 and attempt_total > token_budget:
@@ -175,6 +193,17 @@ def _format_sources(docs: list[dict]) -> list[dict]:
     ]
 
 
+LLM_UNAVAILABLE_MSG = (
+    "I'm sorry, I'm unable to generate a response right now. "
+    "Please try again in a moment."
+)
+
+NO_INFO_MSG = (
+    "I don't have enough information to answer that question. "
+    "Please contact our support team at support@gigacorp.com for further assistance."
+)
+
+
 def build_generate_node(llm=None, memory=None):
     def generate(state: ConversationState) -> dict:
         docs = state.get("retrieved_docs", [])
@@ -184,21 +213,24 @@ def build_generate_node(llm=None, memory=None):
         session_id = state.get("session_id", "")
 
         if llm and has_relevant:
-            history = _build_history(memory, session_id, llm, query)
-            system_prompt, user_prompt = _build_rag_prompt(query, context, history)
-            answer = llm.generate(user_prompt, system_prompt=system_prompt)
+            answer = LLM_UNAVAILABLE_MSG
+            try:
+                history = _build_history(memory, session_id, llm, query)
+                system_prompt, user_prompt = _build_rag_prompt(query, context, history)
+                answer = llm.generate(user_prompt, system_prompt=system_prompt)
+            except Exception as e:
+                log_exception(e, "generate_node.llm_generate")
+                # If LLM returns error string, use it directly (friendlier)
+                if answer.startswith("I'm sorry") or answer.startswith("I don't have"):
+                    pass
+                else:
+                    answer = LLM_UNAILABLE_MSG
         elif llm and not has_relevant:
-            answer = (
-                "I don't have enough information to answer that question. "
-                "Please contact our support team at support@gigacorp.com for further assistance."
-            )
+            answer = NO_INFO_MSG
         else:
             answer = state.get("answer", "")
             if not answer and not has_relevant:
-                answer = (
-                    "I don't have enough information to answer that question. "
-                    "Please contact our support team at support@gigacorp.com for further assistance."
-                )
+                answer = NO_INFO_MSG
 
         sources = _format_sources(docs)
         return {"answer": answer, "sources": sources}

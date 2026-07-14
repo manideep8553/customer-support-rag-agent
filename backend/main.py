@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.config import settings
 from backend.di.container import container
 from backend.api.routes import build_router
+from backend.errors import ConfigurationError, log_exception
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,18 +28,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"  {settings.app_name} v{settings.app_version}")
     logger.info("=" * 60)
 
-    kb_status = container.kb_manager.status()
-    if not kb_status["initialized"]:
-        logger.info("Knowledge base not initialized — ingesting default documents...")
-        try:
-            result = container.kb_manager.ingest_file()
-            logger.info(f"  -> {result['message']}")
-        except FileNotFoundError:
-            logger.warning("  -> No knowledge base documents found. Place .md files in data/knowledge_base/")
-        except Exception as e:
-            logger.error(f"  -> Ingestion failed: {e}")
-    else:
-        logger.info(f"Knowledge base loaded: {kb_status['chunk_count']} chunks")
+    try:
+        kb_status = container.kb_manager.status()
+        if not kb_status.get("initialized", False):
+            logger.info("Knowledge base not initialized \u2014 ingesting default documents...")
+            try:
+                result = container.kb_manager.ingest_file()
+                logger.info("  -> %s", result.get("message", "Ingestion completed"))
+            except FileNotFoundError:
+                logger.warning("  -> No knowledge base documents found. Place .md files in data/knowledge_base/")
+            except Exception as e:
+                logger.error("  -> Ingestion failed: %s", e)
+        else:
+            logger.info("Knowledge base loaded: %s chunks", kb_status.get("chunk_count", 0))
+    except Exception as e:
+        log_exception(e, "lifespan.startup")
+        logger.warning("Knowledge base initialization failed, continuing without it: %s", e)
 
     yield
 
