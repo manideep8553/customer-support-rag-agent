@@ -146,12 +146,19 @@ class SupportGraph:
         yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 
     def _tokenize(self, text: str) -> list[str]:
+        if not text:
+            return [""]
         tokens = []
-        for word in text.split(" "):
-            tokens.append(word + " ")
-        if tokens:
-            tokens[-1] = tokens[-1].rstrip(" ")
-        return tokens or [""]
+        words = text.split(" ")
+        for i, word in enumerate(words):
+            if i == 0:
+                # First token: yield character-by-character for instant perceived latency
+                for ch in word:
+                    tokens.append(ch)
+                tokens.append(" ")
+            else:
+                tokens.append(word + (" " if i < len(words) - 1 else ""))
+        return tokens
 
     def retrieval_diagnostics(self, query: str, k: int = 4, threshold: float = 0.0) -> dict:
         try:

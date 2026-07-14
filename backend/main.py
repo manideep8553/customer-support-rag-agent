@@ -29,6 +29,12 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     try:
+        container.preload()
+    except Exception as e:
+        log_exception(e, "lifespan.preload")
+        logger.warning("Container preload failed: %s", e)
+
+    try:
         kb_status = container.kb_manager.status()
         if not kb_status.get("initialized", False):
             logger.info("Knowledge base not initialized \u2014 ingesting default documents...")

@@ -7,6 +7,7 @@ from typing import Optional
 
 from backend.ports.memory import Memory, MessageEntry, SessionInfo
 from backend.config import settings
+from backend.cache import WriteCoalescer
 
 
 class JsonFileMemory(Memory):
@@ -18,6 +19,8 @@ class JsonFileMemory(Memory):
         self._max_turns = settings.memory_max_turns
         self._timeout_minutes = settings.session_timeout_minutes
         self._max_sessions = 1000
+        self._coalescer = WriteCoalescer(flush_interval=2.0, batch_threshold=10)
+        self._coalescer.set_save_fn(self._save_session)
         self._load_sessions()
 
     def _is_expired(self, session: dict) -> bool:
@@ -51,7 +54,7 @@ class JsonFileMemory(Memory):
                 "messages": [],
                 "summary": "",
             }
-            self._save_session(session_id)
+            self._coalescer.mark_dirty(session_id)
         return session_id
 
     def _evict_oldest(self):
@@ -72,7 +75,7 @@ class JsonFileMemory(Memory):
             max_messages = self._max_turns * 2
             if len(session["messages"]) > max_messages:
                 session["messages"] = session["messages"][-max_messages:]
-            self._save_session(session_id)
+            self._coalescer.mark_dirty(session_id)
 
     def get_history(self, session_id: str) -> str:
         messages = self.get_messages(session_id)
@@ -93,7 +96,7 @@ class JsonFileMemory(Memory):
             if not session:
                 return
             session["summary"] = summary
-            self._save_session(session_id)
+            self._coalescer.mark_dirty(session_id)
 
     def get_summary(self, session_id: str) -> str:
         with self._lock:
@@ -144,7 +147,7 @@ class JsonFileMemory(Memory):
             session["messages"] = []
             session["summary"] = ""
             session["last_active"] = datetime.utcnow().isoformat()
-            self._save_session(session_id)
+            self._coalescer.mark_dirty(session_id)
             return True
 
     def cleanup_expired(self) -> int:

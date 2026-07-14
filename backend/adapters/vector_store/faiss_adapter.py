@@ -7,6 +7,7 @@ from typing import Optional
 from backend.ports.vector_store import VectorStore, SearchResult
 from backend.config import settings
 from backend.errors import VectorStoreError, EmbeddingError, log_exception
+from backend.cache import embedding_cache
 
 logger = logging.getLogger("gigacorp.vector_store")
 
@@ -53,13 +54,21 @@ class FAISSAdapter(VectorStore):
             log_exception(e, "FAISSAdapter.add")
             raise VectorStoreError("Failed to add documents to vector store", cause=e)
 
+    def _embed_query(self, query: str) -> np.ndarray:
+        cached = embedding_cache.get(query)
+        if cached is not None:
+            return np.array([cached], dtype=np.float32)
+        vec = self._embedding_model.embed([query])[0]
+        embedding_cache.set(query, vec)
+        return np.array([vec], dtype=np.float32)
+
     def search(self, query: str, k: Optional[int] = None, score_threshold: Optional[float] = None) -> list[SearchResult]:
         k = k or settings.top_k_retrieval
         threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         if self._index is None or self._index.ntotal == 0:
             return []
         try:
-            query_vec = np.array(self._embedding_model.embed([query]), dtype=np.float32)
+            query_vec = self._embed_query(query)
             import faiss
             faiss.normalize_L2(query_vec)
             scores, indices = self._index.search(query_vec, k)

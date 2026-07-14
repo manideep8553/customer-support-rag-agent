@@ -5,6 +5,7 @@ from typing import Optional
 from backend.ports.vector_store import VectorStore, SearchResult
 from backend.config import settings
 from backend.errors import VectorStoreError, EmbeddingError, log_exception
+from backend.cache import embedding_cache
 
 logger = logging.getLogger("gigacorp.vector_store")
 
@@ -64,13 +65,21 @@ class ChromaDBAdapter(VectorStore):
             log_exception(e, "ChromaDBAdapter.add")
             raise VectorStoreError("Failed to add documents to ChromaDB", cause=e)
 
+    def _embed_query(self, query: str) -> list[list[float]]:
+        cached = embedding_cache.get(query)
+        if cached is not None:
+            return [cached]
+        vec = self._embedding_model.embed([query])[0]
+        embedding_cache.set(query, vec)
+        return [vec]
+
     def search(self, query: str, k: Optional[int] = None, score_threshold: Optional[float] = None) -> list[SearchResult]:
         if not self._ready or self._collection is None:
             return []
         k = k or settings.top_k_retrieval
         threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         try:
-            query_emb = self._embedding_model.embed([query])
+            query_emb = self._embed_query(query)
             results = self._collection.query(
                 query_embeddings=query_emb,
                 n_results=k,

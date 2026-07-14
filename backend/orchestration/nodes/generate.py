@@ -3,6 +3,7 @@ import logging
 from backend.orchestration.state import ConversationState
 from backend.config import settings
 from backend.errors import log_exception
+from backend.cache import response_cache, token_cache
 
 logger = logging.getLogger("gigacorp.generate")
 
@@ -55,6 +56,27 @@ Conversation to summarize:
 
 Summary:"""
 
+NO_INFO_MSG = (
+    "I don't have enough information to answer that question. "
+    "Please contact our support team at support@gigacorp.com for further assistance."
+)
+
+
+def _estimate_tokens(text: str, llm) -> int:
+    cached = token_cache.get(text)
+    if cached is not None:
+        return cached
+    if hasattr(llm, "count_tokens"):
+        try:
+            count = llm.count_tokens(text)
+            token_cache.set(text, count)
+            return count
+        except Exception:
+            pass
+    count = len(text.split())
+    token_cache.set(text, count)
+    return count
+
 
 def _build_history(memory, session_id: str, llm, query: str) -> str:
     try:
@@ -81,14 +103,6 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
     recent_lines = [format_line(m) for m in messages]
     summary_line = f"[Previous conversation summary: {summary}]" if summary else ""
 
-    def estimate_tokens(text: str) -> int:
-        if hasattr(llm, "count_tokens"):
-            try:
-                return llm.count_tokens(text)
-            except Exception:
-                return len(text.split())
-        return len(text.split())
-
     answer_note = "\n[Note: The current turn's assistant answer will be shown here after generation.]"
 
     def total_tokens(summary_line: str, lines: list[str], query: str) -> int:
@@ -98,7 +112,7 @@ def _build_history(memory, session_id: str, llm, query: str) -> str:
         parts.extend(lines)
         parts.append(f"Customer: {query}")
         parts.append(answer_note)
-        return estimate_tokens("\n".join(parts))
+        return _estimate_tokens("\n".join(parts), llm)
 
     current_total = total_tokens(summary_line, recent_lines, query)
 
@@ -198,10 +212,54 @@ LLM_UNAVAILABLE_MSG = (
     "Please try again in a moment."
 )
 
-NO_INFO_MSG = (
-    "I don't have enough information to answer that question. "
-    "Please contact our support team at support@gigacorp.com for further assistance."
-)
+# Intent keywords for fast-path matching (avoids LLM call)
+INTENT_ANSWERS = {
+    "refund": (
+        "Based on GigaCorp's Return and Refund Policy (Section 1):\n\n"
+        "\u2022 **Standard Refund Window:** 30 days from purchase for software products and subscriptions. "
+        "After 30 days, refunds are prorated.\n"
+        "\u2022 **Hardware Returns:** 15 days from delivery in original packaging. A 15% restocking fee applies to opened items.\n"
+        "\u2022 **Enterprise Contracts:** 60-day cancellation window for full refund on annual contracts.\n"
+        "\u2022 **Processing Time:** Refunds are processed within 5-10 business days after inspection.\n\n"
+        "To request a refund, visit portal.gigacorp.com/refunds or contact Customer Support with your order number."
+    ),
+    "shipping": (
+        "According to GigaCorp's Shipping and Delivery Policy (Section 2):\n\n"
+        "\u2022 **Standard (5-8 business days):** Free for orders over $500, otherwise $12.99\n"
+        "\u2022 **Express (2-3 business days):** $24.99\n"
+        "\u2022 **Next-Day (1 business day):** $39.99\n\n"
+        "International shipping takes 7-14 business days via DHL or FedEx. "
+        "Customs duties and import taxes are the customer's responsibility.\n\n"
+        "Digital products are delivered via email within 1 hour of purchase. "
+        "Tracking information is sent via email once physical orders ship."
+    ),
+    "contact": (
+        "You can reach GigaCorp Customer Support through these channels:\n\n"
+        "\u2022 **Customer Portal:** support.gigacorp.com\n"
+        "\u2022 **Email:**\n"
+        "  - Basic: support@gigacorp.com\n"
+        "  - Priority: priority@gigacorp.com\n"
+        "  - Premium: premium@gigacorp.com\n"
+        "\u2022 **Phone:** +1 (555) 123-4567 (Premium customers only, 24/7)\n"
+        "\u2022 **Chat:** Available in the Customer Portal (Priority and Premium)\n\n"
+        "Support is available 24/7 for Premium customers. Basic support response times "
+        "are within 24 hours for critical issues."
+    ),
+}
+
+INTENT_KEYWORDS: dict[str, list[str]] = {
+    "refund": ["return", "refund", "money back"],
+    "shipping": ["shipping", "delivery", "ship", "track order"],
+    "contact": ["contact", "support", "phone", "email support", "customer service"],
+}
+
+
+def _match_fast_intent(query: str) -> str | None:
+    q = query.lower()
+    for intent, keywords in INTENT_KEYWORDS.items():
+        if any(kw in q for kw in keywords):
+            return intent
+    return None
 
 
 def build_generate_node(llm=None, memory=None):
@@ -212,19 +270,34 @@ def build_generate_node(llm=None, memory=None):
         has_relevant = bool(docs)
         session_id = state.get("session_id", "")
 
+        # Fast-path: rule-based answer for known intents (no LLM call needed)
+        if not llm or not has_relevant:
+            intent = _match_fast_intent(query)
+            if intent and intent in INTENT_ANSWERS:
+                sources = _format_sources(docs)
+                return {"answer": INTENT_ANSWERS[intent], "sources": sources}
+
         if llm and has_relevant:
+            context_preview = context[:200] if context else ""
+
+            # Check response cache
+            cached = response_cache.get(session_id, query, context_preview)
+            if cached is not None:
+                sources = _format_sources(docs)
+                return {"answer": cached, "sources": sources}
+
             answer = LLM_UNAVAILABLE_MSG
             try:
                 history = _build_history(memory, session_id, llm, query)
                 system_prompt, user_prompt = _build_rag_prompt(query, context, history)
                 answer = llm.generate(user_prompt, system_prompt=system_prompt)
+                response_cache.set(session_id, query, context_preview, answer)
             except Exception as e:
                 log_exception(e, "generate_node.llm_generate")
-                # If LLM returns error string, use it directly (friendlier)
                 if answer.startswith("I'm sorry") or answer.startswith("I don't have"):
                     pass
                 else:
-                    answer = LLM_UNAILABLE_MSG
+                    answer = LLM_UNAVAILABLE_MSG
         elif llm and not has_relevant:
             answer = NO_INFO_MSG
         else:

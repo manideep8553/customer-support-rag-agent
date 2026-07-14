@@ -143,5 +143,22 @@ class Container:
             llm=self.llm,
         )
 
+    def preload(self) -> None:
+        """Preload the embedding model and warm the vector store."""
+        logger.info("Preloading components...")
+        if self.embedding_model:
+            try:
+                self.embedding_model.embed(["warmup"])
+                logger.info("Embedding model warmed up")
+            except Exception as e:
+                logger.warning("Embedding model warmup failed: %s", e)
+        if self.vector_store:
+            try:
+                if self.vector_store.is_initialized:
+                    logger.info("Vector store is loaded (%d chunks)", self.vector_store.chunk_count)
+            except Exception as e:
+                logger.warning("Vector store status check failed: %s", e)
+        logger.info("Preloading complete")
+
 
 container = Container()

@@ -43,6 +43,7 @@ from backend.errors import (
     friendly_error,
     log_exception,
 )
+from backend.cache import embedding_cache, response_cache, token_cache
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +346,38 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
             "status": "success",
             "sessions_purged": purged,
             "message": f"Cleaned up {purged} expired session(s)",
+        }
+
+    @router.post(
+        "/cache/clear",
+        responses={
+            200: {"description": "All caches cleared"},
+        },
+    )
+    async def clear_caches():
+        try:
+            embedding_cache.clear()
+            response_cache.clear()
+            token_cache.clear()
+        except Exception as e:
+            logger.exception("Cache clear error")
+            raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "status": "success",
+            "message": "Embedding, response, and token caches cleared",
+        }
+
+    @router.get(
+        "/cache/stats",
+        responses={
+            200: {"description": "Cache statistics"},
+        },
+    )
+    async def cache_stats():
+        return {
+            "embedding_cache": len(embedding_cache._cache) if hasattr(embedding_cache, "_cache") else 0,
+            "response_cache": len(response_cache._cache) if hasattr(response_cache, "_cache") else 0,
+            "token_cache": len(token_cache._cache) if hasattr(token_cache, "_cache") else 0,
         }
 
     # ── Ingest ─────────────────────────────────────────────────────────
