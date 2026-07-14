@@ -4,15 +4,15 @@ from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
 
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.customer.models import (
     CustomerProfile, ShippingAddress, Order, OrderItem, OrderStatusLog,
     Invoice, ReturnRequest, ExchangeRequest,
-    Subscription, SavedPaymentMethod, SupportTicket,
+    Subscription, SavedPaymentMethod, SupportTicket, TicketComment, TicketAttachment,
     LoyaltyTier, AccountStatus, OrderStatus, PaymentStatus,
-    ReturnStatus, ExchangeStatus, SubscriptionStatus, TicketStatus,
+    ReturnStatus, ExchangeStatus, SubscriptionStatus, TicketStatus, TicketPriority,
     Shipment, ShipmentStatus,
 )
 from backend.customer.tracker import CourierTracker
@@ -347,30 +347,292 @@ class CustomerService:
             for p in pms
         ]
 
-    async def get_support_tickets(self, user_id: UUID, db: AsyncSession, limit: int = 10) -> list:
+    async def get_support_tickets(self, user_id: UUID, db: AsyncSession, limit: int = 10,
+                                   status_filter: Optional[str] = None) -> list:
         profile = await self.get_customer_by_user_id(user_id, db)
         if not profile:
             return []
-        result = await db.execute(
-            select(SupportTicket).where(SupportTicket.customer_id == profile.id)
-            .order_by(desc(SupportTicket.created_at)).limit(limit)
-        )
+        query = select(SupportTicket).where(SupportTicket.customer_id == profile.id)
+        if status_filter:
+            query = query.where(SupportTicket.status == status_filter)
+        result = await db.execute(query.order_by(desc(SupportTicket.created_at)).limit(limit))
         tickets = result.scalars().all()
-        return [
+        return [await self._ticket_to_dict(t, db) for t in tickets]
+
+    async def _ticket_to_dict(self, t: SupportTicket, db: AsyncSession) -> dict:
+        cc = await db.execute(select(func.count(TicketComment.id)).where(TicketComment.ticket_id == t.id))
+        comment_count = cc.scalar() or 0
+        ac = await db.execute(select(func.count(TicketAttachment.id)).where(TicketAttachment.ticket_id == t.id))
+        attachment_count = ac.scalar() or 0
+        return {
+            "id": str(t.id),
+            "ticket_number": t.ticket_number,
+            "subject": t.subject,
+            "status": t.status.value,
+            "status_label": t.status.value.replace("_", " ").title(),
+            "priority": t.priority.value,
+            "category": t.category,
+            "subcategory": t.subcategory,
+            "assigned_to": t.assigned_to,
+            "description": t.description,
+            "resolution": t.resolution,
+            "related_order_number": t.related_order_number,
+            "tags": t.tags,
+            "opened_at": t.opened_at.isoformat(),
+            "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+            "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+            "closed_by": t.closed_by,
+            "escalated_at": t.escalated_at.isoformat() if t.escalated_at else None,
+            "escalation_reason": t.escalation_reason,
+            "updated_at": t.updated_at.isoformat(),
+            "comment_count": comment_count,
+            "attachment_count": attachment_count,
+        }
+
+    async def _ticket_detail_dict(self, t: SupportTicket, db: AsyncSession) -> dict:
+        base = await self._ticket_to_dict(t, db)
+        comments_result = await db.execute(
+            select(TicketComment).where(TicketComment.ticket_id == t.id)
+            .order_by(TicketComment.created_at)
+        )
+        comments = comments_result.scalars().all()
+        attachments_result = await db.execute(
+            select(TicketAttachment).where(TicketAttachment.ticket_id == t.id)
+        )
+        attachments = attachments_result.scalars().all()
+        base["comments"] = [
             {
-                "id": str(t.id),
-                "ticket_number": t.ticket_number,
-                "subject": t.subject,
-                "status": t.status.value,
-                "priority": t.priority.value,
-                "category": t.category,
-                "assigned_to": t.assigned_to,
-                "resolution": t.resolution,
-                "opened_at": t.opened_at.isoformat(),
-                "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+                "id": str(c.id),
+                "author": c.author,
+                "body": c.body,
+                "is_internal": c.is_internal,
+                "created_at": c.created_at.isoformat(),
             }
-            for t in tickets
+            for c in comments
         ]
+        base["attachments"] = [
+            {
+                "id": str(a.id),
+                "filename": a.filename,
+                "content_type": a.content_type,
+                "size_bytes": a.size_bytes,
+                "uploaded_at": a.uploaded_at.isoformat(),
+            }
+            for a in attachments
+        ]
+        return base
+
+    async def get_ticket_detail(self, user_id: UUID, ticket_number: str, db: AsyncSession) -> Optional[dict]:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            return None
+        result = await db.execute(
+            select(SupportTicket).where(
+                SupportTicket.customer_id == profile.id,
+                SupportTicket.ticket_number == ticket_number,
+            )
+        )
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+        return await self._ticket_detail_dict(t, db)
+
+    async def create_ticket(self, user_id: UUID, subject: str, category: str,
+                             description: str, priority: str = "medium",
+                             related_order_number: Optional[str] = None,
+                             db: AsyncSession = None) -> dict:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            raise ValueError("Customer profile not found")
+        try:
+            priority_enum = TicketPriority(priority)
+        except ValueError:
+            raise ValueError(f"Invalid priority: {priority}")
+
+        count_result = await db.execute(select(func.count(SupportTicket.id)))
+        count = count_result.scalar() or 0
+        ticket_number = f"TKT-{datetime.utcnow().strftime('%Y')}-{count + 1:04d}"
+
+        ticket = SupportTicket(
+            customer_id=profile.id,
+            ticket_number=ticket_number,
+            subject=subject,
+            category=category,
+            description=description,
+            priority=priority_enum,
+            status=TicketStatus.OPEN,
+            related_order_number=related_order_number,
+        )
+        db.add(ticket)
+        await db.flush()
+
+        welcome_comment = TicketComment(
+            ticket_id=ticket.id,
+            author="System",
+            body=f"Thank you for contacting GigaCorp Support. Your ticket #{ticket_number} has been created. "
+                 f"A support representative will review your request and follow up within 24 hours.",
+            is_internal=False,
+        )
+        db.add(welcome_comment)
+        await db.flush()
+
+        return await self._ticket_detail_dict(ticket, db)
+
+    async def update_ticket_status(self, user_id: UUID, ticket_number: str,
+                                    new_status: str, note: Optional[str] = None,
+                                    db: AsyncSession = None) -> Optional[dict]:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            raise ValueError("Customer profile not found")
+        result = await db.execute(
+            select(SupportTicket).where(
+                SupportTicket.customer_id == profile.id,
+                SupportTicket.ticket_number == ticket_number,
+            )
+        )
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+        try:
+            status_enum = TicketStatus(new_status)
+        except ValueError:
+            raise ValueError(f"Invalid status: {new_status}")
+
+        old_status = t.status.value
+        now = datetime.utcnow()
+        t.status = status_enum
+        t.updated_at = now
+
+        if status_enum == TicketStatus.RESOLVED:
+            t.resolved_at = now
+        elif status_enum == TicketStatus.CLOSED:
+            t.closed_at = now
+            t.closed_by = "Customer"
+
+        if note:
+            comment = TicketComment(
+                ticket_id=t.id,
+                author="Customer",
+                body=f"Status changed from '{old_status}' to '{new_status}': {note}",
+                is_internal=False,
+            )
+            db.add(comment)
+        else:
+            comment = TicketComment(
+                ticket_id=t.id,
+                author="System",
+                body=f"Status changed from '{old_status}' to '{new_status}'.",
+                is_internal=True,
+            )
+            db.add(comment)
+
+        await db.flush()
+        return await self._ticket_detail_dict(t, db)
+
+    async def add_ticket_comment(self, user_id: UUID, ticket_number: str,
+                                  body: str, is_internal: bool = False,
+                                  db: AsyncSession = None) -> Optional[dict]:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            raise ValueError("Customer profile not found")
+        result = await db.execute(
+            select(SupportTicket).where(
+                SupportTicket.customer_id == profile.id,
+                SupportTicket.ticket_number == ticket_number,
+            )
+        )
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+
+        comment = TicketComment(
+            ticket_id=t.id,
+            author="Customer",
+            body=body,
+            is_internal=is_internal,
+        )
+        db.add(comment)
+        t.updated_at = datetime.utcnow()
+
+        if is_internal:
+            t.status = TicketStatus.IN_PROGRESS
+
+        await db.flush()
+        return await self._ticket_detail_dict(t, db)
+
+    async def escalate_ticket(self, user_id: UUID, ticket_number: str,
+                               reason: str, db: AsyncSession = None) -> Optional[dict]:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            raise ValueError("Customer profile not found")
+        result = await db.execute(
+            select(SupportTicket).where(
+                SupportTicket.customer_id == profile.id,
+                SupportTicket.ticket_number == ticket_number,
+            )
+        )
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+
+        now = datetime.utcnow()
+        t.status = TicketStatus.ESCALATED
+        t.escalated_at = now
+        t.escalation_reason = reason
+        t.updated_at = now
+
+        comment = TicketComment(
+            ticket_id=t.id,
+            author="Customer",
+            body=f"Escalation requested: {reason}",
+            is_internal=False,
+        )
+        db.add(comment)
+
+        internal = TicketComment(
+            ticket_id=t.id,
+            author="System",
+            body=f"Ticket escalated by customer. Reason: {reason}. "
+                 f"Priority: {t.priority.value}. Please review urgently.",
+            is_internal=True,
+        )
+        db.add(internal)
+        await db.flush()
+        return await self._ticket_detail_dict(t, db)
+
+    async def reopen_ticket(self, user_id: UUID, ticket_number: str,
+                             reason: str, db: AsyncSession = None) -> Optional[dict]:
+        profile = await self.get_customer_by_user_id(user_id, db)
+        if not profile:
+            raise ValueError("Customer profile not found")
+        result = await db.execute(
+            select(SupportTicket).where(
+                SupportTicket.customer_id == profile.id,
+                SupportTicket.ticket_number == ticket_number,
+            )
+        )
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+        if t.status not in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
+            raise ValueError(f"Ticket cannot be reopened in its current state: {t.status.value}")
+
+        now = datetime.utcnow()
+        t.status = TicketStatus.OPEN
+        t.resolved_at = None
+        t.closed_at = None
+        t.closed_by = None
+        t.updated_at = now
+
+        comment = TicketComment(
+            ticket_id=t.id,
+            author="Customer",
+            body=f"Ticket reopened: {reason}",
+            is_internal=False,
+        )
+        db.add(comment)
+        await db.flush()
+        return await self._ticket_detail_dict(t, db)
 
     async def get_loyalty(self, user_id: UUID, db: AsyncSession) -> Optional[dict]:
         profile = await self.get_customer_by_user_id(user_id, db)
@@ -484,6 +746,12 @@ class CustomerService:
         )
         open_tickets = result_tickets.scalars().all()
 
+        result_all_tickets = await db.execute(
+            select(SupportTicket).where(SupportTicket.customer_id == profile.id)
+            .order_by(desc(SupportTicket.created_at)).limit(10)
+        )
+        all_tickets = result_all_tickets.scalars().all()
+
         next_tier_name, points_needed = _next_tier(profile.loyalty_points)
 
         from backend.auth.models import User
@@ -541,11 +809,27 @@ class CustomerService:
                 {
                     "ticket_number": t.ticket_number,
                     "subject": t.subject,
+                    "status": t.status.value,
+                    "status_label": t.status.value.replace("_", " ").title(),
                     "priority": t.priority.value,
                     "category": t.category,
+                    "assigned_to": t.assigned_to,
                     "opened_at": t.opened_at.isoformat(),
                 }
                 for t in open_tickets
+            ],
+            "all_tickets": [
+                {
+                    "ticket_number": t.ticket_number,
+                    "subject": t.subject,
+                    "status": t.status.value,
+                    "status_label": t.status.value.replace("_", " ").title(),
+                    "priority": t.priority.value,
+                    "category": t.category,
+                    "assigned_to": t.assigned_to,
+                    "opened_at": t.opened_at.isoformat(),
+                }
+                for t in all_tickets
             ],
             "shipments": await self.tracker.get_customer_tracking_context(profile.id, db),
         }

@@ -86,6 +86,7 @@ class TicketStatus(str, enum.Enum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     WAITING_CUSTOMER = "waiting_customer"
+    ESCALATED = "escalated"
     RESOLVED = "resolved"
     CLOSED = "closed"
 
@@ -336,16 +337,52 @@ class SupportTicket(Base):
     status = Column(SAEnum(TicketStatus), default=TicketStatus.OPEN, nullable=False)
     priority = Column(SAEnum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False)
     category = Column(String(100), nullable=True)
+    subcategory = Column(String(100), nullable=True)
     description = Column(Text, nullable=True)
     assigned_to = Column(String(200), nullable=True)
     resolution = Column(Text, nullable=True)
     opened_at = Column(DateTime, default=_utcnow, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)
+    closed_by = Column(String(100), nullable=True)
+    escalated_at = Column(DateTime, nullable=True)
+    escalation_reason = Column(Text, nullable=True)
+    related_order_number = Column(String(50), nullable=True)
+    tags = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
     customer = relationship("CustomerProfile", back_populates="support_tickets")
+    comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan",
+                            order_by="TicketComment.created_at")
+    attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
+
+
+class TicketComment(Base):
+    __tablename__ = "ticket_comments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(UUID(as_uuid=True), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    author = Column(String(200), nullable=False)
+    body = Column(Text, nullable=False)
+    is_internal = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    ticket = relationship("SupportTicket", back_populates="comments")
+
+
+class TicketAttachment(Base):
+    __tablename__ = "ticket_attachments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(UUID(as_uuid=True), ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=True)
+    content_type = Column(String(100), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    uploaded_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    ticket = relationship("SupportTicket", back_populates="attachments")
 
 
 class ShipmentStatus(str, enum.Enum):

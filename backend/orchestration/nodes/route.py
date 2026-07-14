@@ -6,6 +6,9 @@ from backend.orchestration.state import ConversationState
 logger = logging.getLogger("gigacorp.route")
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
+    "ticket": ["support ticket", "my ticket", "ticket status", "open a ticket",
+               "create a ticket", "raise a ticket", "ticket number", "submit a ticket",
+               "file a complaint", "report a problem", "my support request"],
     "tracking": ["track package", "track my package", "where is my package",
                  "package location", "shipment status", "my shipment",
                  "tracking update", "where is my shipment", "when will it arrive",

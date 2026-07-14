@@ -13,7 +13,7 @@ from backend.orchestration.nodes.answers import (
     answer_sla, answer_nonprofit, answer_general,
     answer_order_status, answer_loyalty,
     answer_invoice, answer_return_policy, answer_exchange,
-    answer_tracking,
+    answer_tracking, answer_ticket,
 )
 
 logger = logging.getLogger("gigacorp.generate")
@@ -272,10 +272,14 @@ INTENT_ANSWER_FN: dict[str, callable] = {
     "order_status": answer_order_status,
     "loyalty": answer_loyalty,
     "tracking": answer_tracking,
+    "ticket": answer_ticket,
     "general": answer_general,
 }
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
+    "ticket": ["support ticket", "my ticket", "ticket status", "open a ticket",
+               "create a ticket", "raise a ticket", "ticket number", "submit a ticket",
+               "file a complaint", "report a problem", "my support request"],
     "tracking": ["track package", "track my package", "where is my package",
                  "package location", "shipment status", "my shipment",
                  "tracking update", "where is my shipment", "when will it arrive",

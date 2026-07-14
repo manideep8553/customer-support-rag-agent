@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +33,32 @@ class ExchangeRequest(BaseModel):
 class StatusUpdateRequest(BaseModel):
     status: str = Field(..., min_length=1, max_length=30)
     notes: str | None = None
+
+
+class CreateTicketRequest(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=300)
+    category: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(..., min_length=1, max_length=5000)
+    priority: str = Field(default="medium", pattern=r"^(low|medium|high|critical)$")
+    related_order_number: str | None = None
+
+
+class TicketStatusUpdateRequest(BaseModel):
+    status: str = Field(..., min_length=1, max_length=30)
+    note: str | None = None
+
+
+class TicketCommentRequest(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+    is_internal: bool = False
+
+
+class TicketEscalateRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class TicketReopenRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=1000)
 
 
 def build_customer_router(service: CustomerService) -> APIRouter:
@@ -187,11 +214,105 @@ def build_customer_router(service: CustomerService) -> APIRouter:
     @router.get("/support-tickets")
     async def list_tickets(
         limit: int = 10,
+        status: Optional[str] = None,
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ):
-        tickets = await service.get_support_tickets(current_user.id, db, limit=limit)
+        kwargs = {}
+        if status:
+            kwargs["status_filter"] = status
+        tickets = await service.get_support_tickets(current_user.id, db, limit=limit, **kwargs)
         return {"support_tickets": tickets, "count": len(tickets)}
+
+    @router.post("/support-tickets")
+    async def create_ticket(
+        body: CreateTicketRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        try:
+            result = await service.create_ticket(
+                current_user.id, body.subject, body.category,
+                body.description, body.priority, body.related_order_number, db,
+            )
+            return {"status": "created", "ticket": result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.get("/support-tickets/{ticket_number}")
+    async def get_ticket(
+        ticket_number: str,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        ticket = await service.get_ticket_detail(current_user.id, ticket_number, db)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        return ticket
+
+    @router.patch("/support-tickets/{ticket_number}/status")
+    async def update_ticket_status(
+        ticket_number: str, body: TicketStatusUpdateRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        try:
+            result = await service.update_ticket_status(
+                current_user.id, ticket_number, body.status, body.note, db,
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            return {"status": "updated", "ticket": result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/support-tickets/{ticket_number}/comments")
+    async def add_comment(
+        ticket_number: str, body: TicketCommentRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        try:
+            result = await service.add_ticket_comment(
+                current_user.id, ticket_number, body.body, body.is_internal, db,
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            return {"status": "comment_added", "ticket": result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/support-tickets/{ticket_number}/escalate")
+    async def escalate_ticket(
+        ticket_number: str, body: TicketEscalateRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        try:
+            result = await service.escalate_ticket(
+                current_user.id, ticket_number, body.reason, db,
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            return {"status": "escalated", "ticket": result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/support-tickets/{ticket_number}/reopen")
+    async def reopen_ticket(
+        ticket_number: str, body: TicketReopenRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        try:
+            result = await service.reopen_ticket(
+                current_user.id, ticket_number, body.reason, db,
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            return {"status": "reopened", "ticket": result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     @router.get("/shipments")
     async def list_shipments(

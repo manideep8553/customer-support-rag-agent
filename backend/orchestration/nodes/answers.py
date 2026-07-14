@@ -541,6 +541,47 @@ def answer_loyalty(state: ConversationState) -> dict:
     )}
 
 
+STATUS_ICONS = {
+    "open": "🆕", "in_progress": "🔧", "waiting_customer": "📞",
+    "escalated": "🚨", "resolved": "✅", "closed": "🔒",
+}
+PRIORITY_LABELS = {
+    "low": "Low", "medium": "Medium", "high": "High", "critical": "Critical",
+}
+
+
+def answer_ticket(state: ConversationState) -> dict:
+    customer = _cd(state)
+    open_tickets = customer.get("open_tickets", [])
+    all_tickets = customer.get("all_tickets", open_tickets)
+    if not all_tickets:
+        return {"answer": (
+            "You don't have any support tickets on your account. "
+            "If you need help, you can create a new ticket through the Customer Portal "
+            "or contact our support team at support@gigacorp.com."
+        )}
+    ticket_block = ""
+    for t in all_tickets[:5]:
+        icon = STATUS_ICONS.get(t.get("status", ""), "•")
+        pri = PRIORITY_LABELS.get(t.get("priority", ""), t.get("priority", ""))
+        ticket_block += (
+            f"{icon} **{t['ticket_number']}** — {t['subject'][:60]}\n"
+            f"   Status: {t.get('status_label', t['status'].replace('_', ' ').title())} "
+            f"| Priority: {pri}\n"
+        )
+        if t.get("category"):
+            ticket_block += f"   Category: {t['category']}\n"
+        if t.get("assigned_to"):
+            ticket_block += f"   Assigned to: {t['assigned_to']}\n"
+        ticket_block += "\n"
+    return {"answer": (
+        f"**Your Support Tickets** ({len(all_tickets)} total)\n\n"
+        f"{ticket_block}"
+        "You can view full ticket details, add comments, or create new tickets "
+        "in the Customer Portal at support.gigacorp.com."
+    )}
+
+
 def answer_general(state: ConversationState) -> dict:
     docs = state.get("retrieved_docs", [])
     customer = _cd(state)

@@ -147,7 +147,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content=ErrorDetail(
             detail="An unexpected error occurred. Please try again.",
             code="INTERNAL_ERROR",
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 

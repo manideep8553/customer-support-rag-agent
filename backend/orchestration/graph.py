@@ -38,6 +38,7 @@ INTENT_NODES = {
     "return_policy": answer_nodes.answer_return_policy,
     "exchange": answer_nodes.answer_exchange,
     "tracking": answer_nodes.answer_tracking,
+    "ticket": answer_nodes.answer_ticket,
     "general": answer_nodes.answer_general,
 }
 

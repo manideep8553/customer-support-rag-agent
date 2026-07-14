@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.customer.models import (
     CustomerProfile, ShippingAddress, Order, OrderItem, OrderStatusLog,
-    Invoice, ReturnRequest, Subscription, SavedPaymentMethod, SupportTicket,
+    Invoice, ReturnRequest, Subscription, SavedPaymentMethod,
+    SupportTicket, TicketComment, TicketAttachment,
     LoyaltyTier, AccountStatus, OrderStatus, PaymentStatus, ReturnStatus,
     SubscriptionStatus, PaymentMethodType, TicketStatus, TicketPriority,
     Shipment, ShipmentStatus, ShipmentEvent,
@@ -280,6 +281,21 @@ async def seed_customer_data(db: AsyncSession):
             "assigned_to": "Alice Chen (Support Engineer)",
             "resolution": "Provided step-by-step firewall configuration guide. Customer confirmed setup complete.",
             "opened_at": now - timedelta(days=40), "resolved_at": now - timedelta(days=35),
+            "tags": ["firewall", "setup", "enterprise"],
+            "comments": [
+                {"author": "Customer", "body": "I need help setting up the firewall on our new GigaBox Enterprise. The default configuration doesn't meet our security requirements.", "is_internal": False,
+                 "created_at": now - timedelta(days=40)},
+                {"author": "Alice Chen (Support Engineer)", "body": "I've reviewed your account. Let me send you the advanced firewall configuration guide. Which specific rules do you need to set up?", "is_internal": False,
+                 "created_at": now - timedelta(days=39)},
+                {"author": "Customer", "body": "We need to allow VPN access for remote employees and block all other inbound traffic.", "is_internal": False,
+                 "created_at": now - timedelta(days=38)},
+                {"author": "Alice Chen (Support Engineer)", "body": "Customer requested firewall configuration. Priority handling needed for production system.", "is_internal": True,
+                 "created_at": now - timedelta(days=38)},
+                {"author": "Alice Chen (Support Engineer)", "body": "I've sent the configuration guide with step-by-step instructions for setting up VPN rules and inbound filtering. Please let me know if you need any clarification.", "is_internal": False,
+                 "created_at": now - timedelta(days=37)},
+                {"author": "Customer", "body": "The guide was very helpful. We've configured the firewall and everything is working perfectly. Thank you!", "is_internal": False,
+                 "created_at": now - timedelta(days=35)},
+            ],
         },
         {
             "ticket_number": "TKT-2025-002",
@@ -290,15 +306,33 @@ async def seed_customer_data(db: AsyncSession):
             "assigned_to": "Bob Martinez (Billing)",
             "resolution": "Corrected invoice issued. Refund of $300 processed.",
             "opened_at": now - timedelta(days=20), "resolved_at": now - timedelta(days=15),
+            "tags": ["billing", "refund", "invoice"],
+            "comments": [
+                {"author": "Customer", "body": "Our annual license renewal invoice shows $4,800 but our agreement states $4,500. Please correct this.", "is_internal": False,
+                 "created_at": now - timedelta(days=20)},
+                {"author": "Bob Martinez (Billing)", "body": "I've checked the contract and you're correct. The system applied the standard rate instead of the negotiated discount. I've issued a corrected invoice and a $300 refund.", "is_internal": False,
+                 "created_at": now - timedelta(days=15)},
+            ],
         },
         {
             "ticket_number": "TKT-2025-003",
             "subject": "Shipping Delay - Order ORD-2025-003 to India",
             "status": TicketStatus.IN_PROGRESS, "priority": TicketPriority.MEDIUM,
             "category": "shipping",
+            "subcategory": "international_delivery",
             "description": "International order to India has been delayed at customs. Need assistance with documentation.",
             "assigned_to": "Raj Patel (Logistics)",
+            "related_order_number": "ORD-2025-003",
             "opened_at": now - timedelta(days=1),
+            "tags": ["shipping", "customs", "international", "india"],
+            "comments": [
+                {"author": "Customer", "body": "My order ORD-2025-003 to Bangalore, India is stuck at customs. They're asking for additional documentation. What do I need to provide?", "is_internal": False,
+                 "created_at": now - timedelta(days=1)},
+                {"author": "Raj Patel (Logistics)", "body": "I'm looking into the customs requirements for your shipment. Indian customs typically needs a signed commercial invoice and packing list. I'll prepare the documents and send them to you.", "is_internal": False,
+                 "created_at": now - timedelta(hours=20)},
+                {"author": "Raj Patel (Logistics)", "body": "Customer needs urgent support - order contains server equipment which may require additional import permits.", "is_internal": True,
+                 "created_at": now - timedelta(hours=18)},
+            ],
         },
         {
             "ticket_number": "TKT-2025-004",
@@ -307,11 +341,54 @@ async def seed_customer_data(db: AsyncSession):
             "category": "feature_request",
             "description": "Current API rate limit of 1000 req/hour is insufficient for our deployment. Requesting increase to 5000 req/hour.",
             "opened_at": now - timedelta(hours=6),
+            "tags": ["api", "rate-limit", "feature-request"],
+            "comments": [
+                {"author": "Customer", "body": "We're hitting the 1000 req/hour API rate limit regularly during peak hours. Can you increase this to 5000 req/hour for our account?", "is_internal": False,
+                 "created_at": now - timedelta(hours=6)},
+            ],
+        },
+        {
+            "ticket_number": "TKT-2025-005",
+            "subject": "Server R420 Performance Issues After Firmware Update",
+            "status": TicketStatus.ESCALATED, "priority": TicketPriority.CRITICAL,
+            "category": "technical_support",
+            "subcategory": "hardware",
+            "description": "After applying the latest firmware update (v3.2.1), our Server R420 (order ORD-2025-003) is experiencing random reboots every 4-6 hours. This is affecting our production environment.",
+            "assigned_to": "Senior Engineering Team",
+            "related_order_number": "ORD-2025-003",
+            "opened_at": now - timedelta(days=3),
+            "escalated_at": now - timedelta(days=1),
+            "escalation_reason": "Production server experiencing critical failures. Initial support response was unable to resolve. Requires engineering team intervention.",
+            "tags": ["server", "firmware", "critical", "production"],
+            "comments": [
+                {"author": "Customer", "body": "Our Server R420 started rebooting randomly after the v3.2.1 firmware update. This is urgent as it's our primary database server.", "is_internal": False,
+                 "created_at": now - timedelta(days=3)},
+                {"author": "Alice Chen (Support Engineer)", "body": "I've checked the firmware release notes. There's a known issue with v3.2.1 on certain R420 configurations. Can you provide the system logs?", "is_internal": False,
+                 "created_at": now - timedelta(days=2, hours=12)},
+                {"author": "Customer", "body": "I've attached the system logs. The crash seems to be related to memory management.", "is_internal": False,
+                 "created_at": now - timedelta(days=2, hours=6)},
+                {"author": "Alice Chen (Support Engineer)", "body": "Customer's production server is down. This needs immediate escalation.", "is_internal": True,
+                 "created_at": now - timedelta(days=2)},
+                {"author": "Alice Chen (Support Engineer)", "body": "We've confirmed the memory management issue. Engineering is working on a hotfix. We recommend rolling back to v3.2.0 as a temporary workaround.", "is_internal": False,
+                 "created_at": now - timedelta(days=1, hours=12)},
+                {"author": "Customer", "body": "Rolling back isn't feasible as we need the security patches from v3.2.1. This needs to be resolved immediately.", "is_internal": False,
+                 "created_at": now - timedelta(days=1, hours=6)},
+                {"author": "System", "body": "Ticket escalated to Senior Engineering Team. Reason: Production server experiencing critical failures. Initial support response was unable to resolve. Requires engineering team intervention.", "is_internal": True,
+                 "created_at": now - timedelta(days=1)},
+                {"author": "Senior Engineering Team", "body": "Engineering is aware of the issue. A hotfix (v3.2.2) is being tested and will be deployed within 48 hours. We recommend enabling database replication as a precaution.", "is_internal": False,
+                 "created_at": now - timedelta(hours=12)},
+            ],
         },
     ]
     for td in tickets_data:
-        ticket = SupportTicket(customer_id=profile.id, **td)
+        comments = td.pop("comments", [])
+        tags = td.pop("tags", None)
+        ticket = SupportTicket(customer_id=profile.id, tags=tags, **td)
         db.add(ticket)
+        await db.flush()
+        for c_data in comments:
+            comment = TicketComment(ticket_id=ticket.id, **c_data)
+            db.add(comment)
 
     # ── Shipments ──────────────────────────────────────────────────────
     now_ish = datetime.utcnow()
