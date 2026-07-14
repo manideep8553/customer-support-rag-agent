@@ -249,8 +249,8 @@ INTENT_ANSWERS = {
 
 INTENT_KEYWORDS: dict[str, list[str]] = {
     "refund": ["return", "refund", "money back"],
-    "shipping": ["shipping", "delivery", "ship", "track order"],
-    "contact": ["contact", "support", "phone", "email support", "customer service"],
+    "shipping": ["shipping", "delivery", "ship", "track order", "where is my order", "order status"],
+    "contact": ["contact", "support", "phone", "email support", "customer service", "talk to"],
 }
 
 
