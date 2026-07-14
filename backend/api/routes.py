@@ -276,6 +276,52 @@ def build_router(orch: SupportGraph, kb_manager: KnowledgeBaseManager) -> APIRou
         ]
         return HistoryResponse(session_id=session_id, messages=entries)
 
+    @router.post(
+        "/sessions/{session_id}/history/clear",
+        response_model=ClearMemoryResponse,
+        responses={
+            200: {"description": "Conversation history cleared, session preserved"},
+            404: {"description": "Session not found"},
+        },
+    )
+    async def clear_session_history(session_id: str):
+        mem = orch.memory
+        info = mem.get_session_info(session_id)
+        if not info:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        try:
+            cleared = mem.clear_history(session_id)
+            if not cleared:
+                raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Failed to clear history for session %s", session_id)
+            raise HTTPException(status_code=500, detail=str(e))
+        return ClearMemoryResponse(
+            status="success",
+            session_id=session_id,
+            message=f"Chat history cleared for session '{session_id}'",
+        )
+
+    @router.post(
+        "/memory/cleanup",
+        responses={
+            200: {"description": "Expired sessions cleaned up"},
+        },
+    )
+    async def cleanup_expired_sessions():
+        try:
+            purged = orch.memory.cleanup_expired()
+        except Exception as e:
+            logger.exception("Memory cleanup error")
+            raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "status": "success",
+            "sessions_purged": purged,
+            "message": f"Cleaned up {purged} expired session(s)",
+        }
+
     # ── Ingest ─────────────────────────────────────────────────────────
     @router.post(
         "/ingest",

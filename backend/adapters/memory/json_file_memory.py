@@ -17,12 +17,33 @@ class JsonFileMemory(Memory):
         self._sessions_dir.mkdir(parents=True, exist_ok=True)
         self._max_turns = settings.memory_max_turns
         self._timeout_minutes = settings.session_timeout_minutes
+        self._max_sessions = 1000
         self._load_sessions()
 
-    def create_session(self) -> str:
-        session_id = f"session_{uuid.uuid4().hex[:12]}"
+    def _is_expired(self, session: dict) -> bool:
+        if self._timeout_minutes <= 0:
+            return False
+        last_active = datetime.fromisoformat(session["last_active"])
+        return datetime.utcnow() - last_active > timedelta(minutes=self._timeout_minutes)
+
+    def _ensure_active(self, session_id: str) -> Optional[dict]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return None
+        if self._is_expired(session):
+            self.delete_session(session_id)
+            return None
+        return session
+
+    def create_session(self, session_id: Optional[str] = None) -> str:
+        if session_id is None:
+            session_id = f"session_{uuid.uuid4().hex[:12]}"
         now = datetime.utcnow().isoformat()
         with self._lock:
+            if session_id in self._sessions:
+                return session_id
+            if len(self._sessions) >= self._max_sessions:
+                self._evict_oldest()
             self._sessions[session_id] = {
                 "session_id": session_id,
                 "created_at": now,
@@ -33,9 +54,16 @@ class JsonFileMemory(Memory):
             self._save_session(session_id)
         return session_id
 
+    def _evict_oldest(self):
+        oldest = min(
+            self._sessions.items(),
+            key=lambda kv: kv[1].get("last_active", kv[1]["created_at"]),
+        )
+        self.delete_session(oldest[0])
+
     def add_turn(self, session_id: str, role: str, content: str) -> None:
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._ensure_active(session_id)
             if not session:
                 return
             entry = MessageEntry(role=role, content=content)
@@ -61,7 +89,7 @@ class JsonFileMemory(Memory):
         if not summary:
             return
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._ensure_active(session_id)
             if not session:
                 return
             session["summary"] = summary
@@ -69,25 +97,26 @@ class JsonFileMemory(Memory):
 
     def get_summary(self, session_id: str) -> str:
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._ensure_active(session_id)
             if not session:
                 return ""
             return session.get("summary", "")
 
     def get_messages(self, session_id: str) -> list[dict]:
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._ensure_active(session_id)
             if not session:
                 return []
             return list(session["messages"])
 
     def list_sessions(self) -> list[str]:
         with self._lock:
+            self._purge_expired()
             return list(self._sessions.keys())
 
     def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._ensure_active(session_id)
             if not session:
                 return None
             return SessionInfo(
@@ -106,6 +135,35 @@ class JsonFileMemory(Memory):
             if path.exists():
                 path.unlink()
             return True
+
+    def clear_history(self, session_id: str) -> bool:
+        with self._lock:
+            session = self._ensure_active(session_id)
+            if not session:
+                return False
+            session["messages"] = []
+            session["summary"] = ""
+            session["last_active"] = datetime.utcnow().isoformat()
+            self._save_session(session_id)
+            return True
+
+    def cleanup_expired(self) -> int:
+        with self._lock:
+            count = 0
+            expired = [
+                sid for sid, s in self._sessions.items()
+                if self._is_expired(s)
+            ]
+            for sid in expired:
+                self.delete_session(sid)
+                count += 1
+            return count
+
+    def _purge_expired(self):
+        for sid in list(self._sessions.keys()):
+            s = self._sessions[sid]
+            if self._is_expired(s):
+                self.delete_session(sid)
 
     def _save_session(self, session_id: str) -> None:
         data = self._sessions.get(session_id)
