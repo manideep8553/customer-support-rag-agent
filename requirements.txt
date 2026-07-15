@@ -24,7 +24,7 @@ fastembed==0.8.0
 openai==2.45.0
 
 # Tokenization
-tiktoken==0.8.0
+tiktoken==0.12.0
 
 # Auth / Database
 SQLAlchemy[asyncio]==2.0.51
