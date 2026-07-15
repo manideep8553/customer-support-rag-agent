@@ -128,17 +128,10 @@ async def lifespan(app: FastAPI):
 
     try:
         kb_status = container.kb_manager.status()
-        if not kb_status.get("initialized", False):
-            logger.info("Knowledge base not initialized — ingesting default documents...")
-            try:
-                result = container.kb_manager.ingest_file()
-                logger.info("  -> %s", result.get("message", "Ingestion completed"))
-            except FileNotFoundError:
-                logger.warning("No knowledge base documents found.")
-            except Exception as e:
-                logger.error("  -> Ingestion failed: %s", e)
-        else:
+        if kb_status.get("initialized", False):
             logger.info("Knowledge base loaded: %s chunks", kb_status.get("chunk_count", 0))
+        else:
+            logger.info("Knowledge base not initialized. Ingest documents via admin API.")
     except Exception as e:
         log_exception(e, "lifespan.startup")
         logger.warning("Knowledge base init failed, continuing: %s", e)
